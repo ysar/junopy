@@ -32,6 +32,7 @@ class InitSpiceKernels(object):
         self.find_kernels()
         self.isKernelsExists = os.path.exists(KERNEL_DIR)
         if not self.isKernelsExists:
+            print("Kernels don't exist, downloading ...")
             self.download_kernels()
 
         self.create_meta_kernel_file()

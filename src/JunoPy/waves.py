@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import datetime as dt
 
+import matplotlib.colors as colors
 
 class WavesData(object):
 
@@ -77,19 +78,23 @@ class WavesData(object):
             columns=['SCET', 'SCLK (sec)']
             )
 
-
     def plot(self, ax=None, magdata=None):
         """
         Plot Waves-Survey Spectra  (Freq vs time).
         """
-        import matplotlib.colors as colors
 
-        x = self.df.index
-        y = self.channels['freq'][self.channels['freq'] <= 20e3]
-        X, Y = np.meshgrid(x, y)
+
+
         cnames = [x for i, x in enumerate(self.channels['names']) \
                   if self.channels['freq'][i] <= 20e3]
-        C = self.df[cnames].values.T
+        cfreq = [f for f in self.channels['freq'] if f <= 20e3]
+
+        df = self.df[cnames]
+
+        x = df.index
+        y = cfreq
+        X, Y = np.meshgrid(x, y)
+        C = df.values.T
 
         mp = ax.pcolormesh(X, Y, C,
                            cmap='cividis',
@@ -97,7 +102,7 @@ class WavesData(object):
 
         if magdata:
             ax = magdata.plot_electron_cyc_freq(ax)
-            ax.set_ylim([50, 41e6])
+            ax.set_ylim([50, 20e3])
 
         ax.set_yscale('log')
         ax.set_ylabel(self.yvar + self.units)

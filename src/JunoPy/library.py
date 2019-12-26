@@ -4,7 +4,7 @@
 import os
 import numpy as np
 import datetime as dt
-
+import pandas as pd
 
 PDS_URL = 'https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/'
 
@@ -44,41 +44,26 @@ def convert_pos_spherical(pos):
     return R, LT, Latitude
 
 
-def find_ticks(time, duration='day', nticks=6):
+def find_ticks_between(start, end, nticks=6):
     """
     Given an axes object make the ticks appropriately for subplots.
     """
     from JunoPy.spice import InitSpiceKernels, get_juno_position
 
-    if duration == 'day':
-        starttime = dt.datetime(time.year, time.month, time.day)
-        endtime = dt.datetime(time.year, time.month, time.day) + \
-                  dt.timedelta(days=1)
-        spacing = dt.timedelta(seconds =  24 * 3600 / nticks)
-
-    elif duration == '4hrs':
-        starttime = time + dt.timedelta(hours=0)
-        endtime = starttime + dt.timedelta(hours=4)
-        spacing = dt.timedelta(seconds =  4 * 3600 / nticks)
-
-    time_array = np.arange(
-        starttime,
-        endtime + spacing, spacing).astype(dt.datetime)
+    time_array = pd.date_range(
+        start=start, end=end, periods=nticks).to_pydatetime().tolist()
 
     InitSpiceKernels()
     position, _ = get_juno_position(time_array)
+
 
     tickstring = []
     for i, pos in enumerate(position):
 
         R, LT, Latitude = convert_pos_spherical(pos)
 
-        # if i == 0:
-        #     tickstring.append(
-        #         'Time\nRadial Distance ($R_J$) \nLocal Time\nLatitude ($^\\circ$)')
-        # else:
         tickstring.append(
-            time_array[i].strftime('%H:%M') + '\n' +
+            time_array[i].strftime('%H:%M:%S') + '\n' +
             '{:7.2f}'.format(R) + '\n' +
             '{:7.2f}'.format(LT) + '\n' +
             '{:7.2f}'.format(Latitude))

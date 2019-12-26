@@ -13,7 +13,6 @@ class MagData(object):
         "Bx", "By", "Bz", "Brange", "X", "Y", "Z"
     ]
 
-
     def __init__(self, filename=None):
         """
         Class to parse magnetometer data files. Stores data into a pandas
@@ -108,20 +107,21 @@ class MagData(object):
             np.cos(phi) * self.df['By']
 
 
-    def plot(self, vars=None, axs=None):
+    def plot(self, vars=None, ax=None):
         """
         Plot magnetometer data. Returns an axes object.
         """
-        for i, ax in enumerate(axs):
-            self.df.plot(
-                y=vars[i],
-                ax=ax,
-                grid=True,
-                color='k',
-                legend=False,
-                lw=0.4
-            )
+        axs = self.df.plot(
+            y=vars,
+            subplots=True,
+            ax=ax,
+            grid=True,
+            color='k',
+            legend=False,
+            lw=0.75
+        )
 
+        for i, ax in enumerate(axs):
             ax.xaxis.set_minor_locator(AutoMinorLocator())
             ax.grid('on', which='minor', lw='0.5', ls='dotted')
 
@@ -129,6 +129,7 @@ class MagData(object):
             if ymin < 0 < ymax:
                 ax.axhline(y=0, color='k', ls='dashed', lw=1)
             ax.set_ylabel(vars[i] + ' (nT)')
+            ax.set_xlim([self.df.index[0], self.df.index[-1]])
 
         return axs
 
@@ -137,8 +138,7 @@ class MagData(object):
         """
         Calculate and plot the electron cyclotron frequency.
         """
-        self.df['omega_ce'] = 1.60217e-19 * self.df['Bmag'] * \
-                              1e-9 / 9.1e-31 / 2 / np.pi
+        self.df['omega_ce'] = 1.60217e-19 * self.df['Bmag'] * 1e-9 / 9.1e-31 / 2 / np.pi
         self.df.plot(
             y='omega_ce',
             ax=ax,
@@ -146,5 +146,54 @@ class MagData(object):
             legend=False,
             lw=0.4
         )
-
         return ax
+
+
+def mva(magdata):
+    """
+    Perform minimum variance analysis (MVA).
+    Input - MagData object containing pandas dataframe in self.df
+    Ouput - MagData object with additional variables
+            B1, B2, B3, eigenval, x1, x2, x3
+    """
+    magdata.x1 = np.zeros(3)
+    magdata.x2 = np.zeros(3)
+    magdata.x3 = np.zeros(3)
+    magdata.eigval = np.zeros(3)
+    magdata.df['B1'] = 0
+    magdata.df['B2'] = 0
+    magdata.df['B3'] = 0
+
+    M = np.zeros((3, 3))
+    for m, mcom in enumerate(['Bx', 'By', 'Bz']):
+        for n, ncom in enumerate(['Bx', 'By', 'Bz']):
+            M[m, n] = (magdata.df[mcom] * magdata.df[ncom]).mean() - \
+                      magdata.df[mcom].mean() * magdata.df[ncom].mean()
+
+    eigval, eigvec = np.linalg.eig(M)
+
+    imax = np.argmax(eigval)
+    imin = np.argmin(eigval)
+    imid = list(set([0, 1, 2]) - set([imin, imax]))[0]
+
+    magdata.eigval[0] = eigval[imin]
+    magdata.eigval[1] = eigval[imid]
+    magdata.eigval[2] = eigval[imax]
+    magdata.x1 = eigvec[:, imin]
+    magdata.x2 = eigvec[:, imid]
+    magdata.x3 = eigvec[:, imax]
+
+    magdata.df['B1'] = magdata.df.apply(
+        lambda x: x['Bx'] * magdata.x1[0]
+                  + x['By'] * magdata.x1[1]
+                  + x['Bz'] * magdata.x1[2], axis=1)
+    magdata.df['B2'] = magdata.df.apply(
+        lambda x: x['Bx'] * magdata.x2[0]
+                  + x['By'] * magdata.x2[1]
+                  + x['Bz'] * magdata.x2[2], axis=1)
+    magdata.df['B3'] = magdata.df.apply(
+        lambda x: x['Bx'] * magdata.x3[0]
+                  + x['By'] * magdata.x3[1]
+                  + x['Bz'] * magdata.x3[2], axis=1)
+
+    return magdata

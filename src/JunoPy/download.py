@@ -53,7 +53,7 @@ def download_multiple_files(urls, outfolder=''):
             )
         )
 
-    while True:         # Progress bar
+    while True:
 
         incomplete_count = sum(1 for x in down if not x.ready())
         per_complete = float(numfiles - incomplete_count) / numfiles

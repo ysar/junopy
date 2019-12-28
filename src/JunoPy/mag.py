@@ -13,14 +13,18 @@ class MagData(object):
         "Bx", "By", "Bz", "Brange", "X", "Y", "Z"
     ]
 
-    def __init__(self, filename=None):
+    def __init__(self, filename=None. ishdf=False):
         """
         Class to parse magnetometer data files. Stores data into a pandas
         dataframe.
         """
         if filename:
-            self.filename = filename
-            self.parse_mag_file()
+            if ishdf:
+                self.filename = filename
+                self.read_hdf5_file()
+            else:
+                self.filename = filename
+                self.parse_mag_file()
 
 
     def count_header_lines(self):
@@ -107,21 +111,21 @@ class MagData(object):
             np.cos(phi) * self.df['By']
 
 
-    def plot(self, vars=None, ax=None):
+    def plot(self, vars=None, axs=None):
         """
         Plot magnetometer data. Returns an axes object.
         """
-        axs = self.df.plot(
-            y=vars,
-            subplots=True,
-            ax=ax,
-            grid=True,
-            color='k',
-            legend=False,
-            lw=0.75
-        )
-
         for i, ax in enumerate(axs):
+
+            self.df.plot(
+                y=vars[i],
+                ax=ax,
+                grid=True,
+                color='k',
+                legend=False,
+                lw=0.75
+            )
+
             ax.xaxis.set_minor_locator(AutoMinorLocator())
             ax.grid('on', which='minor', lw='0.5', ls='dotted')
 
@@ -138,7 +142,8 @@ class MagData(object):
         """
         Calculate and plot the electron cyclotron frequency.
         """
-        self.df['omega_ce'] = 1.60217e-19 * self.df['Bmag'] * 1e-9 / 9.1e-31 / 2 / np.pi
+        self.df['omega_ce'] = 1.60217e-19 * self.df['Bmag'] * 1e-9 \
+                              / 9.1e-31 / 2 / np.pi
         self.df.plot(
             y='omega_ce',
             ax=ax,
@@ -159,7 +164,7 @@ def mva(magdata):
     magdata.x1 = np.zeros(3)
     magdata.x2 = np.zeros(3)
     magdata.x3 = np.zeros(3)
-    magdata.eigval = np.zeros(3)
+    magdata.eigvals = np.zeros(3)
     magdata.df['B1'] = 0
     magdata.df['B2'] = 0
     magdata.df['B3'] = 0

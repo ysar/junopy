@@ -4,7 +4,7 @@ import pandas as pd
 import datetime as dt
 
 
-class JadeChannel(object):
+class JediChannel(object):
 
     def __init__(self, type, columns, lowE, highE, typeparticle, iEnergy):
         """Class to store infromation about the different energy channels"""
@@ -61,7 +61,7 @@ class JediData(object):
 
             f.readline()
 
-        self.FluxChannels = JadeChannel(
+        self.FluxChannels = JediChannel(
             'FLUX', columns, low_E_limit, high_E_limit, particle_type, iEnergies)
 
         self.df = pd.read_csv(self.filename, names=columns, skiprows=5)

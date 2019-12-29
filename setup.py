@@ -16,7 +16,7 @@ setuptools.setup(
         "A python package for analysis of data from the Juno Spacecraft.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/pypa/sampleproject",
+    url="https://github.com/ysar/JunoPy",
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
@@ -24,12 +24,15 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     install_requires=[
-        'numpy>=1.17',
-        'matplotlib>=3.1',
-        'pytest>=5.2',
+        'numpy>=1.18',
+        'matplotlib>=3.1.2',
+        'pytest>=5.3.2',
         'wget>=3.2',
-        'pandas>=0.25',
-        'ipython>=7.9',
-        'spiceypy>=2.3.1'
+        'pandas>=0.25.3',
+        'ipython>=7.11.0',
+        'spiceypy>=2.3.2',
+        'jupyterlab>=1.2.4',
+        'h5py>=2.10.0',
+        'tables>=3.6.1'
     ]
 )

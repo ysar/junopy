@@ -66,7 +66,7 @@ def download_multiple_files(urls, outfolder=''):
                   '.' * (50 - int(per_complete * 50)) +
                   '|', end='\r')
 
-        time.sleep(5)
+        time.sleep(1)
 
     pool.close()
     pool.join()

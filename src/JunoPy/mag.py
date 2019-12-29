@@ -1,7 +1,8 @@
-
+import os
 import numpy as np
 import pandas as pd
 import datetime as dt
+import h5py
 
 from matplotlib.ticker import AutoMinorLocator
 
@@ -13,7 +14,7 @@ class MagData(object):
         "Bx", "By", "Bz", "Brange", "X", "Y", "Z"
     ]
 
-    def __init__(self, filename=None. ishdf=False):
+    def __init__(self, filename=None, ishdf=True):
         """
         Class to parse magnetometer data files. Stores data into a pandas
         dataframe.
@@ -21,7 +22,7 @@ class MagData(object):
         if filename:
             if ishdf:
                 self.filename = filename
-                self.read_hdf5_file()
+                self.df = pd.read_hdf(filename)
             else:
                 self.filename = filename
                 self.parse_mag_file()
@@ -152,8 +153,19 @@ class MagData(object):
             lw=0.4
         )
         return ax
-
-
+    
+    
+    def save_to_hdf5(self):
+        """
+        Save the current instance to an hdf5 file.
+        """
+        hdf5_filename = self.filename[:-4] + '.hdf5'
+        self.df.to_hdf(hdf5_filename, 
+                       os.path.split(self.filename)[-1][:-4], 
+                       mode='w')
+        os.remove(self.filename)
+    
+    
 def mva(magdata):
     """
     Perform minimum variance analysis (MVA).

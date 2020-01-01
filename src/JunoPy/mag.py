@@ -27,7 +27,10 @@ class MagData(object):
                 self.filename = filename
                 self.parse_mag_file()
 
-
+    def __repr__(self):
+        """String representation for class. Writes the dataframe head"""
+        return self.df.head().__repr__()
+    
     def count_header_lines(self):
         """Count header lines in the magnetometer file."""
         with open(self.filename, 'r') as f:
@@ -176,7 +179,7 @@ def mva(magdata):
     magdata.x1 = np.zeros(3)
     magdata.x2 = np.zeros(3)
     magdata.x3 = np.zeros(3)
-    magdata.eigvals = np.zeros(3)
+    magdata.eigval = np.zeros(3)
     magdata.df['B1'] = 0
     magdata.df['B2'] = 0
     magdata.df['B3'] = 0

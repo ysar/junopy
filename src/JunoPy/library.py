@@ -61,11 +61,18 @@ def find_ticks_between(start, end, nticks=6):
     for i, pos in enumerate(position):
 
         R, LT, Latitude = convert_pos_spherical(pos)
-
-        tickstring.append(
-            time_array[i].strftime('%H:%M:%S') + '\n' +
-            '{:7.2f}'.format(R) + '\n' +
-            '{:7.2f}'.format(LT) + '\n' +
-            '{:7.2f}'.format(Latitude))
+        
+        if i == 0:
+            tickstring.append(
+            'Time - {:s}'.format(time_array[i].strftime('%H:%M:%S')) + '\n' +
+            'R  - {:7.2f}'.format(R) + '\n' +
+            'LT - {:7.2f}'.format(LT) + '\n' +
+            'Latitude - {:7.2f}'.format(Latitude))
+        else:
+            tickstring.append(
+                time_array[i].strftime('%H:%M:%S') + '\n' +
+                '{:7.2f}'.format(R) + '\n' +
+                '{:7.2f}'.format(LT) + '\n' +
+                '{:7.2f}'.format(Latitude))
 
     return time_array, tickstring

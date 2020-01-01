@@ -130,4 +130,7 @@ dmypy.json
 
 # Other stuff
 *data*
+*index*
+*spice*
+*out_*
 *.png

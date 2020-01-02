@@ -20,21 +20,24 @@ METAFILE = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
 class InitSpiceKernels(object):
 
     isKernelsExists = False
-
-
+    indexfile = os.path.join(SPICE_DIR, 'index_spice.csv')
+    
     def __init__(self):
         """
         Creating a JunoSpiceKernel object downloads the index file and
         identifies which kernels are useful. If not previously done,
         the relevant kernels are downloaded.
         """
-        self.download_index_file()
-        self.find_kernels()
+        
         self.isKernelsExists = os.path.exists(KERNEL_DIR)
         if not self.isKernelsExists:
             print("Kernels don't exist, downloading ...")
+            self.download_index_file()
+            self.find_kernels()
             self.download_kernels()
-
+        else:
+            self.find_kernels()
+            
         self.create_meta_kernel_file()
 
     def download_index_file(self):
@@ -44,8 +47,7 @@ class InitSpiceKernels(object):
         os.rename(
             os.path.join(SPICE_DIR, 'index.tab'),
             os.path.join(SPICE_DIR, 'index_spice.csv'))
-        self.indexfile = os.path.join(SPICE_DIR, 'index_spice.csv')
-
+        
 
     def find_kernels(self):
         """Finds the relevant kernels by parsing the index file."""

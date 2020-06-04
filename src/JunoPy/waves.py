@@ -78,16 +78,16 @@ class WavesData(object):
             columns=['SCET', 'SCLK (sec)']
             )
 
-    def plot(self, ax=None, magdata=None):
+    def plot(self, ax=None, magdata=None, freqlimit=False, **kwargs):
         """
         Plot Waves-Survey Spectra  (Freq vs time).
         """
 
 
 
-        cnames = [x for i, x in enumerate(self.channels['names']) \
-                  if self.channels['freq'][i] <= 20e3]
-        cfreq = [f for f in self.channels['freq'] if f <= 20e3]
+        cnames = [x for i, x in enumerate(self.channels['names'])]
+                  # if (self.channels['freq'][i] <= 20e3 and self.channels['freq'][i] >= 200)]
+        cfreq = [f for f in self.channels['freq']] # if (f <= 20e3 and f >= 200)]
 
         df = self.df[cnames]
 
@@ -97,13 +97,18 @@ class WavesData(object):
         C = df.values.T
 
         mp = ax.pcolormesh(X, Y, C,
-                           cmap='cividis',
-                           norm=colors.LogNorm())
+                           cmap='jet',
+                           norm=colors.LogNorm(), **kwargs) # , vmin=1e-15, vmax=1e-12)
+        # 14, 10
 
         if magdata:
             ax = magdata.plot_electron_cyc_freq(ax)
+       
+        if freqlimit:
             ax.set_ylim([50, 20e3])
-
+        # ax.set_ylim([200, 20e3]) # self.channels['freq'][-1]]) # 20e3])
+        # ax.set_ylim([self.channels['freq'][1], self.channels['freq'][2]])
+    
         ax.set_yscale('log')
         ax.set_ylabel(self.yvar + self.units)
 

@@ -1,5 +1,6 @@
 
 import os
+import datetime as dt
 import pandas as pd
 
 from JunoPy.library import DATASETS, PDS_URL, EXTENSIONS, TIMEFORMAT
@@ -95,6 +96,15 @@ class IndexFile(object):
         df_masked = df.loc[(df['START_TIME'] > startdate) &
                            (df['STOP_TIME'] <= enddate)]
 
+        if df_masked.empty:
+            df_masked = df.loc[(df['START_TIME'] < startdate) &
+                               (df['STOP_TIME'] >= enddate) &
+                               (startdate - df['START_TIME'] < dt.timedelta(hours=24))]
+
+            print('Date range too short - downloading one file.')
+
+        # print(df_masked)
+
         if sid:
             df_masked = df_masked[df_masked['SID'].str.contains(sid)]
 
@@ -107,12 +117,6 @@ class IndexFile(object):
 
                 urls.append(PDS_URL + DATASETS[self.dataset] + '/' + \
                            f[:-4] + EXTENSIONS[self.dataset])
-
-                # print('Downloading file - {:s}'.format(
-                #       f[:-4] + EXTENSIONS[self.dataset]))
-
-                # download_file(
-                #     url, outfolder=os.path.join('data', self.dataset))
 
             download_multiple_files(
                 urls, outfolder=os.path.join('data', self.dataset))

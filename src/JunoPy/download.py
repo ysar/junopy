@@ -40,7 +40,8 @@ def download_multiple_files(urls, outfolder=''):
 
         outfile = os.path.join(outfolder, url.split('/')[-1])
         if os.path.exists(outfile):
-            os.remove(outfile)
+            # os.remove(outfile)
+            continue
 
         down.append(
             pool.apply_async(

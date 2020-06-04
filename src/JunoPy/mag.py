@@ -6,6 +6,8 @@ import h5py
 
 from matplotlib.ticker import AutoMinorLocator
 
+from JunoPy.spice import InitSpiceKernels, get_juno_position
+
 
 class MagData(object):
 
@@ -115,27 +117,34 @@ class MagData(object):
             np.cos(phi) * self.df['By']
 
 
-    def plot(self, vars=None, axs=None):
+    def plot(self, vars=None, axs=None, Bfit=None):
         """
         Plot magnetometer data. Returns an axes object.
         """
         for i, ax in enumerate(axs):
 
-            self.df.plot(
-                y=vars[i],
-                ax=ax,
-                grid=True,
-                color='k',
-                legend=False,
-                lw=0.75
-            )
-
+#             self.df.plot(
+#                 y=vars[i],
+#                 ax=ax,
+#                 grid=True,
+#                 color='k',
+#                 legend=False,
+#                 lw=0.75
+#             )
+            
+            ax.plot(self.df.index, self.df[vars[i]], color='k', lw=0.75)
+            ax.grid()
+            
             ax.xaxis.set_minor_locator(AutoMinorLocator())
             ax.grid('on', which='minor', lw='0.5', ls='dotted')
 
             xmin, xmax, ymin, ymax = ax.axis()
             if ymin < 0 < ymax:
                 ax.axhline(y=0, color='k', ls='dashed', lw=1)
+                
+            if Bfit is not None:
+                ax.plot(self.df.index, Bfit[i], color='b', lw=0.7)
+
             ax.set_ylabel(vars[i] + ' (nT)')
             ax.set_xlim([self.df.index[0], self.df.index[-1]])
 
@@ -202,7 +211,12 @@ def mva(magdata):
     magdata.x1 = eigvec[:, imin]
     magdata.x2 = eigvec[:, imid]
     magdata.x3 = eigvec[:, imax]
-
+    
+    if magdata.x3[-1] < 0:
+        magdata.x1 *= -1
+        magdata.x2 *= -1
+        magdata.x3 *= -1
+        
     magdata.df['B1'] = magdata.df.apply(
         lambda x: x['Bx'] * magdata.x1[0]
                   + x['By'] * magdata.x1[1]
@@ -217,3 +231,173 @@ def mva(magdata):
                   + x['Bz'] * magdata.x3[2], axis=1)
 
     return magdata
+
+
+def force_free_fit(magfile, start, end):
+    """
+    Given a magdata where MVA has already been performed,
+    fit a force free flux rope. 
+    
+    Steps for fitting.
+    ------------------
+    1. Unit normalize the magnetic field raw data.
+    2. Perform MVA analysis.
+    3. Given the following parameters - 
+        
+        r0 - radius of flux rope
+        phiA, thetaA - orientation of fluxrope axis.
+        
+        Fit a force free model with the initial parameters being
+        rinit - distance between start and end times
+        phiMVA, thetaMVA - orientation of the x2 eigenvector from MVA.
+        
+    4. Calculate the modeled magnetic field in flux rope coords. 
+    5. Convert the modeled field to MVA coordinates.
+    """
+    from scipy.special import jv
+    from scipy.optimize import least_squares
+    
+    
+    # Read the magnetometer file.
+    magdata = MagData(filename=magfile)
+    start_cut = start - dt.timedelta(minutes=5)
+    end_cut   = end   + dt.timedelta(minutes=5)
+    magdata.df = magdata.df.loc[start_cut:end_cut]
+    
+    # Unit normalization
+    magdata.df['Bx'] = magdata.df['Bx'] / magdata.df['Bmag']
+    magdata.df['By'] = magdata.df['By'] / magdata.df['Bmag']
+    magdata.df['Bz'] = magdata.df['Bz'] / magdata.df['Bmag']
+    magdata.df['Bmag_saved'] = magdata.df['Bmag'] 
+    magdata.df['Bmag'] = 1.
+    
+    # Re-read into new object for MVA analysis.
+    magdata_mva = MagData(filename=magfile)
+    magdata_mva.df = magdata_mva.df.loc[start:end]
+    magdata_mva.df['Bx'] = magdata_mva.df['Bx'] / magdata_mva.df['Bmag']
+    magdata_mva.df['By'] = magdata_mva.df['By'] / magdata_mva.df['Bmag']
+    magdata_mva.df['Bz'] = magdata_mva.df['Bz'] / magdata_mva.df['Bmag']
+    magdata_mva.df['Bmag_saved'] = magdata.df['Bmag'] 
+    magdata_mva.df['Bmag'] = 1.
+    magdata_mva = mva(magdata_mva)
+    
+    
+    # Calculate initial orientation for the flux rope axis.
+    epoch = magdata.df.index[0]
+    init = np.zeros(6)
+    init[0] = np.arccos(magdata_mva.x2[2] / np.sqrt(magdata_mva.x2[0]**2 + magdata_mva.x2[1]**2))
+    init[1] = np.arctan2(magdata_mva.x2[1], magdata_mva.x2[0])
+    init[2] = (start + (end - start) / 2 - epoch).total_seconds()
+    init[3] = ((end - start) / 2).total_seconds()
+    init[4] = 0.2
+    init[5] = 0.4
+    
+    shat = np.zeros(3)
+    index_end = magdata.df.index.get_loc(end, method='nearest')
+    index_start = magdata.df.index.get_loc(start, method='nearest')
+        
+    shat[0] = magdata.df['X'][index_end] - magdata.df['X'][index_start]
+    shat[1] = magdata.df['Y'][index_end] - magdata.df['Y'][index_start]
+    shat[2] = magdata.df['Z'][index_end] - magdata.df['Z'][index_start]
+    shat = shat / np.sqrt(np.sum(shat**2))
+    
+    shat_xy = shat
+    shat_xy[2] = 0
+    shat_xy = shat_xy / np.sqrt(np.sum(shat_xy**2))
+     
+    # Force-free flux rope fitting.
+    def calc_cost_function(x, magdata, start, end):
+        """x contains the following parameters
+            
+            x[0] - thetaA
+            x[1] - phiA
+            x[2] - t0 (in units of seconds from epoch)
+            x[3] - T0 (seconds)
+            x[4] - Y0 (seconds)
+            x[5] - alpha (units?)
+        """
+        thetaA = x[0]
+        phiA = x[1]
+        zhat = np.zeros(3)
+        zhat[0] = np.sin(thetaA) * np.cos(phiA)
+        zhat[1] = np.sin(thetaA) * np.sin(phiA)
+        zhat[2] = np.cos(thetaA)
+        
+        yhat = np.cross(zhat, shat)
+        xhat = np.cross(yhat, zhat)
+        
+        tstart = x[2] - x[3]
+        tend = x[2] + x[3]
+        nPoints = 0
+        xisqr = 0
+        for i, dpoint in magdata.df.loc[epoch + dt.timedelta(seconds=tstart):
+                                        epoch + dt.timedelta(seconds=tend)].iterrows():
+                
+            ti = (i - epoch).total_seconds()
+            Ti = np.sqrt(ti**2 + x[4]**2)
+            BAi = jv(0, x[5] * Ti)
+            BTi = jv(1, x[5] * Ti)
+
+            BAi_xyz = BAi * zhat
+            BTi_xyz = BTi * shat_xy
+            Bi_xyz = BAi_xyz + BTi_xyz
+            
+            xisqr += (Bi_xyz[0] - dpoint['Bx'])**2 + \
+                     (Bi_xyz[1] - dpoint['By'])**2 + \
+                     (Bi_xyz[2] - dpoint['Bz'])**2
+                
+        
+            nPoints += 1
+
+        xisqr = xisqr / nPoints
+        
+        return xisqr
+            
+
+    # Force free flux rope fitting
+    print(init)
+    res = least_squares(calc_cost_function, init, args=(magdata, start, end))
+        
+    # Once fitted, we create a new data set with the 'time, Bx, By, Bz' for 
+    # the fitted flux rope.
+    
+        
+    tstart = res.x[2] - res.x[3]
+    tend = res.x[2] + res.x[3]
+    thetaA = res.x[0]
+    phiA = res.x[1]
+    zhat = np.zeros(3)
+    zhat[0] = np.sin(thetaA) * np.cos(phiA)
+    zhat[1] = np.sin(thetaA) * np.sin(phiA)
+    zhat[2] = np.cos(thetaA)
+    yhat = np.cross(zhat, shat)
+    xhat = np.cross(yhat, zhat)
+        
+    
+    nPoints = len(magdata.df.loc[epoch + dt.timedelta(seconds=tstart):
+                                 epoch + dt.timedelta(seconds=tend)])
+    magdata_mva.df_fr = pd.DataFrame(columns=['time', 'Bx', 'By', 'Bz'], index=range(nPoints))
+    
+    ipoint = 0
+    for i, dpoint in magdata.df.loc[epoch + dt.timedelta(seconds=tstart):
+                                    epoch + dt.timedelta(seconds=tend)].iterrows():
+        time = i
+        ti = (i - epoch).total_seconds()
+        Ti = np.sqrt(ti**2 + res.x[4]**2)
+        BAi = jv(0, res.x[5] * Ti)
+        BTi = jv(1, res.x[5] * Ti)
+        BAi_xyz = BAi * zhat
+        BTi_xyz = BTi * shat_xy
+        Bi_xyz = BAi_xyz + BTi_xyz
+        
+        magdata_mva.df_fr['time'][ipoint] = time 
+        magdata_mva.df_fr['Bx'][ipoint] = Bi_xyz[0]
+        magdata_mva.df_fr['By'][ipoint] = Bi_xyz[1]
+        magdata_mva.df_fr['Bz'][ipoint] = Bi_xyz[2]
+        ipoint += 1
+    
+    
+    magdata_mva.df_fr.set_index(['time'], inplace=True)
+    
+    return res, magdata, magdata_mva
+    

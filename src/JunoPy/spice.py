@@ -16,6 +16,7 @@ SPICE_DIR = 'spice'
 KERNEL_DIR = os.path.join(SPICE_DIR, 'kernels')
 JUNO_SPICE_URL = "https://naif.jpl.nasa.gov/pub/naif/pds/data/jno-j_e_ss-spice-6-v1.0/jnosp_1000/"
 METAFILE = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
+JUNO_SPECIFIC_KERNEL = "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00010.tpc"
 
 class InitSpiceKernels(object):
 
@@ -35,6 +36,7 @@ class InitSpiceKernels(object):
             self.download_index_file()
             self.find_kernels()
             self.download_kernels()
+            self.download_juno_specific_kernel()
         else:
             self.find_kernels()
             
@@ -84,7 +86,11 @@ class InitSpiceKernels(object):
             )
             download_file(file_url, outfolder=KERNEL_DIR)
         self.isKernelsExists = True
-
+        
+    
+    def download_juno_specific_kernel(self):
+        download_file(JUNO_SPECIFIC_KERNEL, outfolder=KERNEL_DIR)
+        
 
     def create_meta_kernel_file(self):
         """Create the meta spice kernel file to be used with spiceypy"""
@@ -96,7 +102,9 @@ class InitSpiceKernels(object):
             for i, kernel in self.kernelsdf.iterrows():
                 filename = os.path.join(KERNEL_DIR, kernel['KERNEL_FILENAME'])
                 f.write("'{:s}',\n".format(filename))
-
+            
+            f.write("'{:s}',\n".format(
+                os.path.join(KERNEL_DIR, os.path.split(JUNO_SPECIFIC_KERNEL)[-1])))
             f.write(")\n")
             f.write("\\begintext\n")
 
@@ -121,3 +129,18 @@ def get_juno_position(times, coordsystem='JUNO_JSS'):
     position = np.asarray(position) / 71492
 
     return position, lightTimes
+
+
+def get_ganymede_pos(time, coordsystem='IAU_JUPITER'):
+    
+    metafile = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
+    spice.furnsh(metafile)
+    
+    time_converted = spice.str2et(time.strftime('%Y-%m-%dT%H:%M:%S.%f'))
+    
+    position, lighttime = spice.spkpos(
+        'GANYMEDE', time_converted, coordsystem, 'NONE', 'JUPITER BARYCENTER')
+    
+    spice.kclear()
+    
+    return position / 71492

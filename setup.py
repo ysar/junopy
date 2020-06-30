@@ -33,6 +33,7 @@ setuptools.setup(
         'spiceypy>=2.3.2',
         'jupyterlab>=1.2.4',
         'h5py>=2.10.0',
-        'tables>=3.6.1'
+        'tables>=3.6.1',
+        'ipykernel>=5.3.0',
     ]
 )

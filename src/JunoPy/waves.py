@@ -119,3 +119,55 @@ class WavesData(object):
         cbar.set_label(self.cbarlabel, rotation=270, labelpad=10.0)
 
         return ax
+
+
+class WavesDataDas(object):
+    
+    DAS_SERVER = 'site:/uiowa/juno/wav/survey/das2'
+    
+    def __init__(self, start, end):
+        """Given a start and end time in datetime, fetch data from Iowa DAS server"""
+        import das2
+        
+        src = das2.get_source(self.DAS_SERVER)
+        datasets = src.get({'time' : (start.strftime('%Y-%m-%dT%H:%M:%S'), 
+                                     end.strftime('%Y-%m-%dT%H:%M:%S'))})
+        
+        for d in datasets:
+            if 'LFRL' in d.__str__():
+                self.time = d['Time']['center'].array
+                self.frequency = d['frequency']['center'].array
+                self.spec_dens = d['spec_dens']['center'].array
+        
+        self.cbarlabel = '(V/m)$^2$/Hz'
+        
+    
+    def plot(self, ax=None, magdata=None, freqlimit=False, **kwargs):
+        """
+        Plot Waves-Survey Spectra  (Freq vs time).
+        """
+        scalenorm = colors.LogNorm(**kwargs)
+        
+        mp = ax.pcolormesh(self.time, self.frequency, self.spec_dens,
+                           cmap='jet',
+                           norm=scalenorm) # , vmin=1e-15, vmax=1e-12)
+        # 14, 10
+
+        if magdata:
+            ax = magdata.plot_electron_cyc_freq(ax)
+       
+        if freqlimit:
+            ax.set_ylim([50, 20e3])
+        # ax.set_ylim([200, 20e3]) # self.channels['freq'][-1]]) # 20e3])
+        # ax.set_ylim([self.channels['freq'][1], self.channels['freq'][2]])
+    
+        ax.set_yscale('log')
+        ax.set_ylabel('Freq (Hz)')
+
+        size = 0.02
+        bbox = ax.get_position()
+        cax = ax.figure.add_axes([bbox.x1, bbox.y0, 0.02, bbox.y1- bbox.y0])
+        cbar = ax.figure.colorbar(mp, cax=cax)
+        cbar.set_label(self.cbarlabel, rotation=270, labelpad=10.0)
+
+        return ax

@@ -150,7 +150,7 @@ class WavesDataDas(object):
         
         mp = ax.pcolormesh(self.time, self.frequency, self.spec_dens,
                            cmap='jet',
-                           norm=scalenorm) # , vmin=1e-15, vmax=1e-12)
+                           norm=scalenorm, shading='auto') # , vmin=1e-15, vmax=1e-12)
         # 14, 10
 
         if magdata:

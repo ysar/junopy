@@ -135,7 +135,13 @@ class WavesDataDas(object):
         
         for d in datasets:
             if 'LFRL' in d.__str__():
-                self.time = d['Time']['center'].array
+                
+                self.time = np.zeros(d['Time']['center'].array.shape, dtype=object)
+                for i in range(len(self.time[:, 0])):
+                    for j in range(len(self.time[0, :])):
+                        self.time[i,j] = dt.datetime.utcfromtimestamp(
+                            d['Time']['center'].array[i, j].astype(int) * 1e-9)
+            
                 self.frequency = d['frequency']['center'].array
                 self.spec_dens = d['spec_dens']['center'].array
         

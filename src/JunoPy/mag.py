@@ -149,6 +149,44 @@ class MagData(object):
             ax.set_xlim([self.df.index[0], self.df.index[-1]])
 
         return axs
+    
+    def plot_between(self, start, end, **kwargs):
+        """
+        Plot magnetometer data. Returns an axes object.
+        """
+        vars = kwargs.get('vars')
+        axs = kwargs.get('axs')
+        Bfit = kwargs.get('Bfit')
+        
+        for i, ax in enumerate(axs):
+
+#             self.df.plot(
+#                 y=vars[i],
+#                 ax=ax,
+#                 grid=True,
+#                 color='k',
+#                 legend=False,
+#                 lw=0.75
+#             )
+            
+            ax.plot(self.df.loc[start:end].index, self.df.loc[start:end][vars[i]], 
+                    color=kwargs.get('color', 'k'), lw=0.75)
+            ax.grid()
+            
+            ax.xaxis.set_minor_locator(AutoMinorLocator())
+            ax.grid('on', which='minor', lw='0.5', ls='dotted')
+
+            xmin, xmax, ymin, ymax = ax.axis()
+            if ymin < 0 < ymax:
+                ax.axhline(y=0, color='k', ls='dashed', lw=1)
+                
+            if Bfit is not None:
+                ax.plot(self.df.index, Bfit[i], color='b', lw=0.7)
+
+            ax.set_ylabel(vars[i] + ' (nT)')
+            ax.set_xlim([self.df.index[0], self.df.index[-1]])
+
+        return axs
 
 
     def plot_electron_cyc_freq(self, ax=None):

@@ -71,7 +71,8 @@ class JediData(object):
         self.df['time'] = self.df.apply(
             lambda x: dt.datetime.strptime(x['UTC'], '%Y-%m-%dT%H:%M:%S'),
             axis=1)
-
+        
+        self.df = self.df.drop('UTC', 1)
         self.df.set_index(['time'], inplace=True)
 
 
@@ -115,6 +116,7 @@ class JediData(object):
         ax.set_yscale('log')
         ax.set_ylim([20, y[-1]])
         ax.set_ylabel('Energy [keV]')
+        ax.xaxis.set_minor_locator(AutoMinorLocator())
 
         size = 0.02
         bbox = ax.get_position()
@@ -133,31 +135,19 @@ class JediData(object):
         Plot different lines showing the flux at different energies.
         """
         import matplotlib.pyplot as plt
-        import matplotlib.pylab as pl
+        from matplotlib import cm
         from matplotlib.ticker import AutoMinorLocator
 
         columns = [x for x in self.FluxChannels.columns if 'T{:d}'.format(iTele) in x]
-#         colors = pl.cm.jet(np.linspace(0, 1, len(columns)))
-
-#         mp = self.df.plot(
-#             y=columns,
-#             ax=ax,
-#             grid=True,
-#             legend=False,
-#             lw=0.4,
-#             color=colors
-#         )
         
-        self.df.plot(
-            y=columns,
-            ax=ax,
-            grid=True,
-            style='.',
-            legend=False,
-            lw=0.1,
-            colormap='jet',
-            markersize=2.0
-        )
+        start = 0.0
+        stop = 1.0
+        nlines = len(columns)
+        cm_subsection = np.linspace(start, stop, nlines)
+        colors = [ cm.jet(x) for x in cm_subsection ]
+        
+        for i, col in enumerate(columns):
+            ax.plot(self.df.index, self.df[col], '.', lw=0.1, markersize=2.0, color=colors[i])
         
         ax.set_yscale('log')
         ax.xaxis.set_minor_locator(AutoMinorLocator())

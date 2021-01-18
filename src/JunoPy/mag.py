@@ -187,7 +187,32 @@ class MagData(object):
             ax.set_xlim([self.df.index[0], self.df.index[-1]])
 
         return axs
-
+    
+    
+    def plot_fft(self, start=None, end=None, **kwargs):
+        """
+        Plot the Fast fourier transform spectra.
+        """
+        import numpy.fft as fft
+        
+        vars = kwargs.get('vars')
+        axs = kwargs.get('axs')
+        xlim = kwargs.get('xlim')
+        
+        for i, ax in enumerate(axs):
+            
+            # Perform fft.
+            N = len(self.df[vars[i]])
+            rfft = fft.fft(self.df[vars[i]])
+            rfreq = fft.fftfreq(len(self.df[vars[i]]))
+            
+            # Plot fft.
+            ax.loglog(rfreq, rfft)
+            # ax.set_xlim(xlim[0], xlim[1])
+            
+        return axs
+        
+            
 
     def plot_electron_cyc_freq(self, ax=None):
         """

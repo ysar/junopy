@@ -3,10 +3,17 @@ import numpy as np
 import pandas as pd
 import datetime as dt
 import h5py
+import copy
+import itertools
 
+
+from scipy.special import jv
+from lmfit import Parameters, minimize, report_fit
 from matplotlib.ticker import AutoMinorLocator
+from scipy.signal import argrelextrema
 
 from JunoPy.spice import InitSpiceKernels, get_juno_position
+
 
 
 class MagData(object):
@@ -122,31 +129,22 @@ class MagData(object):
         Plot magnetometer data. Returns an axes object.
         """
         for i, ax in enumerate(axs):
-
-#             self.df.plot(
-#                 y=vars[i],
-#                 ax=ax,
-#                 grid=True,
-#                 color='k',
-#                 legend=False,
-#                 lw=0.75
-#             )
             
             ax.plot(self.df.index, self.df[vars[i]], color='k', lw=0.75)
             ax.grid()
             
-            ax.xaxis.set_minor_locator(AutoMinorLocator())
+            # ax.xaxis.set_minor_locator(AutoMinorLocator())
             ax.grid('on', which='minor', lw='0.5', ls='dotted')
 
             xmin, xmax, ymin, ymax = ax.axis()
             if ymin < 0 < ymax:
                 ax.axhline(y=0, color='k', ls='dashed', lw=1)
                 
-            if Bfit is not None:
-                ax.plot(self.df.index, Bfit[i], color='b', lw=0.7)
+            if Bfit:
+                ax.plot(self.df.index, self.df['Bfit_' + chr(i + 120)], color='b', lw=0.7)
 
             ax.set_ylabel(vars[i] + ' (nT)')
-            ax.set_xlim([self.df.index[0], self.df.index[-1]])
+            # ax.set_xlim([self.df.index[0], self.df.index[-1]])
 
         return axs
     
@@ -159,15 +157,6 @@ class MagData(object):
         Bfit = kwargs.get('Bfit')
         
         for i, ax in enumerate(axs):
-
-#             self.df.plot(
-#                 y=vars[i],
-#                 ax=ax,
-#                 grid=True,
-#                 color='k',
-#                 legend=False,
-#                 lw=0.75
-#             )
             
             ax.plot(self.df.loc[start:end].index, self.df.loc[start:end][vars[i]], 
                     color=kwargs.get('color', 'k'), lw=0.75)
@@ -199,12 +188,15 @@ class MagData(object):
         axs = kwargs.get('axs')
         xlim = kwargs.get('xlim')
         
+        if start and end:
+            df = self.df.loc[start:end].copy()
+            
         for i, ax in enumerate(axs):
             
             # Perform fft.
-            N = len(self.df[vars[i]])
-            rfft = fft.fft(self.df[vars[i]])
-            rfreq = fft.fftfreq(len(self.df[vars[i]]))
+            N = len(df[vars[i]])
+            rfft = fft.fft(df[vars[i]])
+            rfreq = fft.fftfreq(len(df[vars[i]]))
             
             # Plot fft.
             ax.loglog(rfreq, rfft)
@@ -241,226 +233,384 @@ class MagData(object):
         os.remove(self.filename)
     
     
-def mva(magdata):
-    """
-    Perform minimum variance analysis (MVA).
-    Input - MagData object containing pandas dataframe in self.df
-    Ouput - MagData object with additional variables
-            B1, B2, B3, eigenval, x1, x2, x3
-    """
-    magdata.x1 = np.zeros(3)
-    magdata.x2 = np.zeros(3)
-    magdata.x3 = np.zeros(3)
-    magdata.eigval = np.zeros(3)
-    magdata.df['B1'] = 0
-    magdata.df['B2'] = 0
-    magdata.df['B3'] = 0
-
-    M = np.zeros((3, 3))
-    for m, mcom in enumerate(['Bx', 'By', 'Bz']):
-        for n, ncom in enumerate(['Bx', 'By', 'Bz']):
-            M[m, n] = (magdata.df[mcom] * magdata.df[ncom]).mean() - \
-                      magdata.df[mcom].mean() * magdata.df[ncom].mean()
-
-    eigval, eigvec = np.linalg.eig(M)
-
-    imax = np.argmax(eigval)
-    imin = np.argmin(eigval)
-    imid = list(set([0, 1, 2]) - set([imin, imax]))[0]
-
-    magdata.eigval[0] = eigval[imin]
-    magdata.eigval[1] = eigval[imid]
-    magdata.eigval[2] = eigval[imax]
-    magdata.x1 = eigvec[:, imin]
-    magdata.x2 = eigvec[:, imid]
-    magdata.x3 = eigvec[:, imax]
-    
-    if magdata.x3[-1] < 0:
-        magdata.x1 *= -1
-        magdata.x2 *= -1
-        magdata.x3 *= -1
-        
-    magdata.df['B1'] = magdata.df.apply(
-        lambda x: x['Bx'] * magdata.x1[0]
-                  + x['By'] * magdata.x1[1]
-                  + x['Bz'] * magdata.x1[2], axis=1)
-    magdata.df['B2'] = magdata.df.apply(
-        lambda x: x['Bx'] * magdata.x2[0]
-                  + x['By'] * magdata.x2[1]
-                  + x['Bz'] * magdata.x2[2], axis=1)
-    magdata.df['B3'] = magdata.df.apply(
-        lambda x: x['Bx'] * magdata.x3[0]
-                  + x['By'] * magdata.x3[1]
-                  + x['Bz'] * magdata.x3[2], axis=1)
-
-    return magdata
-
-
-def force_free_fit(magfile, start, end):
-    """
-    Given a magdata where MVA has already been performed,
-    fit a force free flux rope. 
-    
-    Steps for fitting.
-    ------------------
-    1. Unit normalize the magnetic field raw data.
-    2. Perform MVA analysis.
-    3. Given the following parameters - 
-        
-        r0 - radius of flux rope
-        phiA, thetaA - orientation of fluxrope axis.
-        
-        Fit a force free model with the initial parameters being
-        rinit - distance between start and end times
-        phiMVA, thetaMVA - orientation of the x2 eigenvector from MVA.
-        
-    4. Calculate the modeled magnetic field in flux rope coords. 
-    5. Convert the modeled field to MVA coordinates.
-    """
-    from scipy.special import jv
-    from scipy.optimize import least_squares
-    
-    
-    # Read the magnetometer file.
-    magdata = MagData(filename=magfile)
-    start_cut = start - dt.timedelta(minutes=5)
-    end_cut   = end   + dt.timedelta(minutes=5)
-    magdata.df = magdata.df.loc[start_cut:end_cut]
-    
-    # Unit normalization
-    magdata.df['Bx'] = magdata.df['Bx'] / magdata.df['Bmag']
-    magdata.df['By'] = magdata.df['By'] / magdata.df['Bmag']
-    magdata.df['Bz'] = magdata.df['Bz'] / magdata.df['Bmag']
-    magdata.df['Bmag_saved'] = magdata.df['Bmag'] 
-    magdata.df['Bmag'] = 1.
-    
-    # Re-read into new object for MVA analysis.
-    magdata_mva = MagData(filename=magfile)
-    magdata_mva.df = magdata_mva.df.loc[start:end]
-    magdata_mva.df['Bx'] = magdata_mva.df['Bx'] / magdata_mva.df['Bmag']
-    magdata_mva.df['By'] = magdata_mva.df['By'] / magdata_mva.df['Bmag']
-    magdata_mva.df['Bz'] = magdata_mva.df['Bz'] / magdata_mva.df['Bmag']
-    magdata_mva.df['Bmag_saved'] = magdata.df['Bmag'] 
-    magdata_mva.df['Bmag'] = 1.
-    magdata_mva = mva(magdata_mva)
-    
-    
-    # Calculate initial orientation for the flux rope axis.
-    epoch = magdata.df.index[0]
-    init = np.zeros(6)
-    init[0] = np.arccos(magdata_mva.x2[2] / np.sqrt(magdata_mva.x2[0]**2 + magdata_mva.x2[1]**2))
-    init[1] = np.arctan2(magdata_mva.x2[1], magdata_mva.x2[0])
-    init[2] = (start + (end - start) / 2 - epoch).total_seconds()
-    init[3] = ((end - start) / 2).total_seconds()
-    init[4] = 0.2
-    init[5] = 0.4
-    
-    shat = np.zeros(3)
-    index_end = magdata.df.index.get_loc(end, method='nearest')
-    index_start = magdata.df.index.get_loc(start, method='nearest')
-        
-    shat[0] = magdata.df['X'][index_end] - magdata.df['X'][index_start]
-    shat[1] = magdata.df['Y'][index_end] - magdata.df['Y'][index_start]
-    shat[2] = magdata.df['Z'][index_end] - magdata.df['Z'][index_start]
-    shat = shat / np.sqrt(np.sum(shat**2))
-    
-    shat_xy = shat
-    shat_xy[2] = 0
-    shat_xy = shat_xy / np.sqrt(np.sum(shat_xy**2))
-     
-    # Force-free flux rope fitting.
-    def calc_cost_function(x, magdata, start, end):
-        """x contains the following parameters
-            
-            x[0] - thetaA
-            x[1] - phiA
-            x[2] - t0 (in units of seconds from epoch)
-            x[3] - T0 (seconds)
-            x[4] - Y0 (seconds)
-            x[5] - alpha (units?)
+    def perform_mva(self):
         """
-        thetaA = x[0]
-        phiA = x[1]
-        zhat = np.zeros(3)
-        zhat[0] = np.sin(thetaA) * np.cos(phiA)
-        zhat[1] = np.sin(thetaA) * np.sin(phiA)
-        zhat[2] = np.cos(thetaA)
-        
-        yhat = np.cross(zhat, shat)
-        xhat = np.cross(yhat, zhat)
-        
-        tstart = x[2] - x[3]
-        tend = x[2] + x[3]
-        nPoints = 0
-        xisqr = 0
-        for i, dpoint in magdata.df.loc[epoch + dt.timedelta(seconds=tstart):
-                                        epoch + dt.timedelta(seconds=tend)].iterrows():
-                
-            ti = (i - epoch).total_seconds()
-            Ti = np.sqrt(ti**2 + x[4]**2)
-            BAi = jv(0, x[5] * Ti)
-            BTi = jv(1, x[5] * Ti)
+        Perform minimum variance analysis (MVA).
+        Input - MagData object containing pandas dataframe in self.df
+        Ouput - MagData object with additional variables
+                B1, B2, B3, eigenval, x1, x2, x3
+        """
+        self.x1 = np.zeros(3)
+        self.x2 = np.zeros(3)
+        self.x3 = np.zeros(3)
+        self.eigval = np.zeros(3)
+        self.df['B1'] = 0
+        self.df['B2'] = 0
+        self.df['B3'] = 0
 
-            BAi_xyz = BAi * zhat
-            BTi_xyz = BTi * shat_xy
-            Bi_xyz = BAi_xyz + BTi_xyz
+        M = np.zeros((3, 3))
+        for m, mcom in enumerate(['Bx', 'By', 'Bz']):
+            for n, ncom in enumerate(['Bx', 'By', 'Bz']):
+                M[m, n] = (self.df[mcom] * self.df[ncom]).mean() - \
+                           self.df[mcom].mean() * self.df[ncom].mean()
+
+        eigval, eigvec = np.linalg.eig(M)
+
+        imax = np.argmax(eigval)
+        imin = np.argmin(eigval)
+        imid = list(set([0, 1, 2]) - set([imin, imax]))[0]
+
+        self.eigval[0] = eigval[imin]
+        self.eigval[1] = eigval[imid]
+        self.eigval[2] = eigval[imax]
+        self.x1 = eigvec[:, imin]
+        self.x2 = eigvec[:, imid]
+        self.x3 = eigvec[:, imax]
+
+        if self.x3[-1] < 0:
+            self.x1 *= -1
+            self.x2 *= -1
+            self.x3 *= -1
+
+        self.df['B1'] = self.df.apply(
+            lambda x: x['Bx'] * self.x1[0]
+                      + x['By'] * self.x1[1]
+                      + x['Bz'] * self.x1[2], axis=1)
+        self.df['B2'] = self.df.apply(
+            lambda x: x['Bx'] * self.x2[0]
+                      + x['By'] * self.x2[1]
+                      + x['Bz'] * self.x2[2], axis=1)
+        self.df['B3'] = self.df.apply(
+            lambda x: x['Bx'] * self.x3[0]
+                      + x['By'] * self.x3[1]
+                      + x['Bz'] * self.x3[2], axis=1)
+        
+        self.P = 100 * ((np.sqrt(self.eigval[2]) - np.sqrt(self.eigval[0]))
+                     * (np.sqrt(self.eigval[2]) - np.sqrt(self.eigval[1]))
+                     * (np.sqrt(self.eigval[1]) - np.sqrt(self.eigval[0]))
+                     / np.sqrt(self.eigval[2]**3))
+
+
+# ==================================================================
+class ForceFreeFluxRope(object):
+    
+    def __init__(self, magfile, start, end):
+        """Main function for force free fit."""
+        
+        magdata = MagData(filename=magfile)
+        
+        start_cut = start - dt.timedelta(minutes=5)
+        end_cut   = end   + dt.timedelta(minutes=5)
+        magdata.df = magdata.df.loc[start_cut:end_cut]
+        
+        magdata_mva = MagData(filename=magfile)
+        magdata_mva.df = magdata_mva.df.loc[start:end]
+        magdata_mva.perform_mva()
+
+        magdata_mva.df['Bmag_saved'] = magdata_mva.df['Bmag']
+        magdata_mva.df['Bx'] /= magdata_mva.df['Bmag']
+        magdata_mva.df['By'] /= magdata_mva.df['Bmag']
+        magdata_mva.df['Bz'] /= magdata_mva.df['Bmag']
+
+        Ti, initParams, T0, mid = self.init_params(magdata_mva)
+
+        eTraj = np.zeros(3)
+        eTraj[0] = magdata_mva.df['X'][-1] - magdata_mva.df['X'][0]
+        eTraj[1] = magdata_mva.df['Y'][-1] - magdata_mva.df['Y'][0]
+        eTraj[2] = magdata_mva.df['Z'][-1] - magdata_mva.df['Z'][0]
+        eTraj = eTraj / np.linalg.norm(eTraj)
+
+        out = minimize(self.objective, initParams, args=(Ti, magdata_mva, eTraj), method='ampgo')
+
+        fitParams = Parameters()
+        fitParams.add('alpha', value=out.params['alpha'].value, vary=False)
+        fitParams.add('B0', value=1.0, vary=True)
+        fitParams.add('IF', value=out.params['IF'].value, vary=False)
+        fitParams.add('thetaA', value=out.params['thetaA'].value, vary=False)
+        fitParams.add('phiA', value=out.params['phiA'].value, vary=False)
+
+        magdata_mva.df['Bx'] *= magdata_mva.df['Bmag']
+        magdata_mva.df['By'] *= magdata_mva.df['Bmag']
+        magdata_mva.df['Bz'] *= magdata_mva.df['Bmag']
+
+        out2 = minimize(self.objective, fitParams, args=(Ti, magdata_mva, eTraj), method='cg')
+
+
+        Bx_fit, By_fit, Bz_fit = self.model_flux_rope(out2.params, Ti, eTraj)
+        B_fit = np.asarray([Bx_fit, By_fit, Bz_fit]).T
+        B1_fit = np.dot(B_fit, np.asarray([magdata_mva.x1, magdata_mva.x2, magdata_mva.x3]).T)
+        
+        print(B1_fit.shape)
+        
+        self.magdata = magdata
+        self.magdata_mva = magdata_mva
+        self.magdata_mva.df['Bfit_x'] = B1_fit[:, 0]
+        self.magdata_mva.df['Bfit_y'] = B1_fit[:, 1] 
+        self.magdata_mva.df['Bfit_z'] = B1_fit[:, 2]
+        self.fitreport_1 = out
+        self.fitreport_2 = out2
+    
+    
+    def model_flux_rope(self, params, t, eTraj):
+        """Creates a flux rope based on parameters."""
+        alpha = params['alpha']
+        IF = params['IF']
+        thetaA = params['thetaA']
+        phiA = params['phiA']
+        B0 = params['B0']
+
+        x = 2 * t * np.sqrt(1 - IF**2)
+        r = np.sqrt(IF**2 + x**2)
+
+        eZ = np.zeros(3)
+        eZ[0] = np.sin(thetaA) * np.cos(phiA)
+        eZ[1] = np.sin(thetaA) * np.sin(phiA)
+        eZ[2] = np.cos(thetaA)
+
+        eY = np.cross(eZ, eTraj)
+        eX = np.cross(eY, eZ)
+
+        eTrajTangent = eTraj - np.dot(eTraj, eZ) * eZ
+
+        B = np.zeros((len(x), 3))
+        for i, xi in enumerate(x):
+            gamma = np.arctan2(xi, IF)
+            eTangent = eTrajTangent * np.cos(gamma) + \
+                       np.cross(eZ, eTrajTangent) * np.sin(gamma) + \
+                       eZ * np.dot(eZ, eTrajTangent) * (1 - np.cos(gamma))
+                       # Rodrigues' Formula
+
+            B_a = B0 * jv(0, alpha * r[i])
+            B_t = B0 * jv(1, alpha * r[i])
+
+            B[i, :] = B_a * eZ + B_t * eTangent
+
+        return B[:, 0], B[:, 1], B[:, 2]
+
+    
+    def init_params(self, mvadata):
+        """
+        Initialize flux rope parameters.
+        """
+        thetaA = np.arccos(mvadata.x2[2])
+        phiA = np.arctan2(mvadata.x2[1], mvadata.x2[0])
+
+        eTraj = np.zeros(3)
+        eTraj[0] = mvadata.df['X'][-1] - mvadata.df['X'][0]
+        eTraj[1] = mvadata.df['Y'][-1] - mvadata.df['Y'][0]
+        eTraj[2] = mvadata.df['Z'][-1] - mvadata.df['Z'][0]
+
+        start = mvadata.df.index[0]
+        end = mvadata.df.index[-1]
+        mid = start + (end - start) / 2
+        T0 = (end - start).total_seconds()
+
+        Ti = list()
+        for time, row in mvadata.df.iterrows():
+            Ti.append((time - mid).total_seconds() / T0)
+
+        Ti = np.asarray(Ti)
+
+        initParams = Parameters()
+        initParams.add('alpha', value=2.4048, min=-2.4048, max=2.4048)
+        initParams.add('B0', value=1.0, vary=False)
+        initParams.add('IF', value=0.5, min=0., max=1.)
+        initParams.add('thetaA', value=thetaA, min=0., max=np.pi)
+        initParams.add('phiA', value=phiA, min=-np.pi, max=np.pi)
+
+        return Ti, initParams, T0, mid
+
+    
+    def objective(self, params, t, magdata, eTraj):
+        """Objective function to minimize."""
+        Bx, By, Bz = self.model_flux_rope(params, t, eTraj)
+
+        residuals = np.zeros((3, len(Bx)))
+        residuals[0, :] = Bx - magdata.df['Bx'].values
+        residuals[1, :] = By - magdata.df['By'].values
+        residuals[2, :] = Bz - magdata.df['Bz'].values
+
+        # return np.abs(residuals).flatten()
+        return np.sum(np.sum(residuals**2, axis=0)) / len(Bx)
+        
+        
+# ==================================================================
+class AutoFluxRope(object):
+    
+    def __init__(self):
+        """This is a namespace class which contains methods necessary
+        for the automated detection of flux ropes. It does not take 
+        any arguments and should not be instantiated."""
+        raise Exception('Namespace class, should not be instantiated.')
+    
+    
+    @staticmethod
+    def find_btheta_crossings(magdata, start=None, end=None):
+        """
+        Give a magnetometer dataset, find all locations where Btheta changes sign.
+        At this point we don't care about whether the crossing is from North-to-south
+        or vice-versa as there can be large changes superimposed onto the smaller ones.
+        We also don't care atm about how large of a change there is in Btheta.
+        """
+        if start and end:
+            df = magdata.df.loc[start:end].copy()
+        else:
+            df = magdata.df.copy()
+
+        df['sign_btheta'] = np.sign(df['Btheta'].values)
+
+        return df[np.abs(df['sign_btheta'].diff()) > 0].index 
+
+    
+    @staticmethod
+    def find_plasmoid_start_end(magdata, crossing, window=5, n=10):
+        """
+        This is done is multiple steps
+        
+        For each indentified Btheta crossing, find the nearest maxima or minima. How?
+        1. Cut away +/- 5 min from the Btheta crossing. 
+        2. Identify all points where d(Btheta)/dt = 0 (or where it changes sign.)
+        3. Store maxima and minima points separately. 
+        
+        Compare each set of maxima and minima for a particular crossing and choose the best fit.
+        1. Create max, min pairs.
+        2. Create a model dataset by interpolating the Btheta values between the two points.
+        3. Calculate LS error for the model and data for each max, min pair.
+        4. Select the pair with the least LS error. 
+        
+        Returns the best start, end times for the Btheta crossing event.
+        """
+        
+        # Cut a chunk of data near the crossing, according to the window specified.
+        # FILTER 1: Select based on window size < 10 min.
+        df = magdata.df.loc[crossing - dt.timedelta(minutes=window): 
+                            crossing + dt.timedelta(minutes=window)].copy()
+    
+        # Identify all maxima and minima inside the analysis window and create pairs.
+        maxima = df.iloc[argrelextrema(df['Btheta'].values, np.greater_equal, order=n)[0]]
+        maxima = maxima[maxima['Btheta'] > 0].index
+        maxima = list(set(maxima))
+        minima = df.iloc[argrelextrema(df['Btheta'].values, np.less_equal, order=n)[0]]
+        minima = minima[minima['Btheta'] < 0].index
+        minima = list(set(minima))
+        
+        pairs = itertools.product(maxima, minima)
+        
+        # Obtain the start, stop pair which gives the minimum least-square error when
+        # the data is approximated as a straight line.
+        
+        
+        min_rsqr = 10
+        rsqr = 100
+        
+        tstart_min = False
+        tend_min = False
+        
+        for positive, negative in pairs:
             
-            xisqr += (Bi_xyz[0] - dpoint['Bx'])**2 + \
-                     (Bi_xyz[1] - dpoint['By'])**2 + \
-                     (Bi_xyz[2] - dpoint['Bz'])**2
+            if not ((positive < crossing < negative) or (negative < crossing < positive)):   
+                # We want the crossing to be inside the start, end pair interval.
+                continue 
                 
-        
-            nPoints += 1
-
-        xisqr = xisqr / nPoints
-        
-        return xisqr
             
-
-    # Force free flux rope fitting
-    print(init)
-    res = least_squares(calc_cost_function, init, args=(magdata, start, end))
+            # FILTER 3: based on the extreme values of Btheta (ignore all less than std. dev.)  
+            
+            if np.abs(df.loc[positive, 'Btheta'] - df.loc[negative, 'Btheta']) < 2:
+                continue
+                
+            df_stddev = magdata.df.loc[crossing - dt.timedelta(minutes=5*window): 
+                                       crossing + dt.timedelta(minutes=5*window)].copy()
+            
+            if np.abs(df.loc[positive, 'Btheta'] - df.loc[negative, 'Btheta']) < df_stddev['Btheta'].std():
+                continue
+            
+            
+            if positive < negative:
+                start = positive
+                end = negative
+            elif negative < positive:
+                start = negative
+                end = positive
+                
+            # FILTER : We don't want any events which are 0.5 times or larger than the total window.
+            if (end - start) > dt.timedelta(minutes=window) or (end - start) < dt.timedelta(seconds=10):
+                continue
+                
+            # FILTER : We don't want a minor excursion into the negative values
+            bthetapos = np.abs(df.loc[crossing, 'Btheta'] - df.loc[start, 'Btheta'])
+            bthetaneg = np.abs(df.loc[end, 'Btheta'] - df.loc[crossing, 'Btheta'])
+            if (bthetapos / bthetaneg > 2 or bthetaneg / bthetapos > 2):
+                continue
+            
+                
+            df_data = magdata.df.loc[start:end].copy()    # Create a model dataset.
+            df_data['Btheta_model'] = np.NaN
+            df_data.loc[start,'Btheta_model'] = df_data.loc[start, 'Btheta'] 
+            df_data.loc[end,'Btheta_model'] = df_data.loc[end, 'Btheta']
+            df_data['Btheta_model'] = df_data['Btheta_model'].interpolate() 
+            
+            
+            avg_btheta = df_data['Btheta'].mean()
+            df_data['ls_square_model'] = (df_data['Btheta'] - df_data['Btheta_model'])**2
+            df_data['ls_square_mean'] = (df_data['Btheta'] - avg_btheta)**2
+            
+            rsqr = 1 - (df_data['ls_square_model'].sum() / df_data['ls_square_mean'].sum())
+                # Calculate the least square
+            
+            
+            # FILTER 2: r-value must be larger than 0.85 for good linear fit.
+            if rsqr < 0.85:
+                continue
+                
+            # FILTER 4: MVA based filters. 
+            magdata_mva = copy.copy(magdata)
+            magdata_mva.df = magdata_mva.df.loc[start:end].copy()
+            if (magdata_mva.df['Br'].abs().mean() > 3 or magdata_mva.df['Br'].abs().median() > 3):
+                continue
+            magdata_mva.perform_mva()
+            
+            if magdata_mva.x3[2] < 0.8:
+                continue
+            
+            if magdata_mva.P < 4.5:    # Degeneracy test based on Oleviera et al. 2020
+                continue
+                
+            if (magdata_mva.eigval[2] / magdata_mva.eigval[1] < 3) or (magdata_mva.eigval[1] / magdata_mva.eigval[0] < 3):
+                continue
+                
+            if (magdata_mva.df['B1'].mean() > 2 or magdata_mva.df['B1'].median() > 2):
+                continue
+                
+                
+            
+                
+            # Check for minima.    
+            if rsqr < min_rsqr:
+                tstart_min = start
+                tend_min = end
+                
+        if tstart_min and tend_min:
+            return tstart_min, tend_min
+    
+    
+    @staticmethod
+    def find_plasmoid_candidates(magdata, crossings, **kwargs):
+        """Given a list of crossings, find all plasmoid candidates. Typically used in scripts."""
         
-    # Once fitted, we create a new data set with the 'time, Bx, By, Bz' for 
-    # the fitted flux rope.
-    
+        starttimes = []
+        endtimes = []
+        for crossing in crossings:
+            times = AutoFluxRope.find_plasmoid_start_end(magdata, crossing, **kwargs)
+            if times:
+                starttimes.append(times[0])
+                endtimes.append(times[1])
+            
+        pairs = set(zip(starttimes, endtimes))
         
-    tstart = res.x[2] - res.x[3]
-    tend = res.x[2] + res.x[3]
-    thetaA = res.x[0]
-    phiA = res.x[1]
-    zhat = np.zeros(3)
-    zhat[0] = np.sin(thetaA) * np.cos(phiA)
-    zhat[1] = np.sin(thetaA) * np.sin(phiA)
-    zhat[2] = np.cos(thetaA)
-    yhat = np.cross(zhat, shat)
-    xhat = np.cross(yhat, zhat)
-        
-    
-    nPoints = len(magdata.df.loc[epoch + dt.timedelta(seconds=tstart):
-                                 epoch + dt.timedelta(seconds=tend)])
-    magdata_mva.df_fr = pd.DataFrame(columns=['time', 'Bx', 'By', 'Bz'], index=range(nPoints))
-    
-    ipoint = 0
-    for i, dpoint in magdata.df.loc[epoch + dt.timedelta(seconds=tstart):
-                                    epoch + dt.timedelta(seconds=tend)].iterrows():
-        time = i
-        ti = (i - epoch).total_seconds()
-        Ti = np.sqrt(ti**2 + res.x[4]**2)
-        BAi = jv(0, res.x[5] * Ti)
-        BTi = jv(1, res.x[5] * Ti)
-        BAi_xyz = BAi * zhat
-        BTi_xyz = BTi * shat_xy
-        Bi_xyz = BAi_xyz + BTi_xyz
-        
-        magdata_mva.df_fr['time'][ipoint] = time 
-        magdata_mva.df_fr['Bx'][ipoint] = Bi_xyz[0]
-        magdata_mva.df_fr['By'][ipoint] = Bi_xyz[1]
-        magdata_mva.df_fr['Bz'][ipoint] = Bi_xyz[2]
-        ipoint += 1
-    
-    
-    magdata_mva.df_fr.set_index(['time'], inplace=True)
-    
-    return res, magdata, magdata_mva
-    
+        starttimes = []
+        endtimes = []
+        for p in pairs:
+            starttimes.append(p[0])
+            endtimes.append(p[1])
+            
+        return starttimes, endtimes

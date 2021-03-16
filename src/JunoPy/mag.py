@@ -12,6 +12,7 @@ from lmfit import Parameters, minimize, report_fit
 from matplotlib.ticker import AutoMinorLocator
 from scipy.signal import argrelextrema
 
+from JunoPy.library import R_JUPITER
 from JunoPy.spice import InitSpiceKernels, get_juno_position
 
 
@@ -128,6 +129,12 @@ class MagData(object):
         """
         Plot magnetometer data. Returns an axes object.
         """
+        var_string = {
+            'Btheta': r'$B_\theta$',
+            'Bphi': r'$B_\phi$',
+            'Br': r'$B_r$',
+            'Bmag': r'|B|'
+        }
         for i, ax in enumerate(axs):
             
             ax.plot(self.df.index, self.df[vars[i]], color='k', lw=0.75)
@@ -143,7 +150,7 @@ class MagData(object):
             if Bfit:
                 ax.plot(self.df.index, self.df['Bfit_' + chr(i + 120)], color='b', lw=0.7)
 
-            ax.set_ylabel(vars[i] + ' (nT)')
+            ax.set_ylabel(var_string[vars[i]] + ' (nT)')
             # ax.set_xlim([self.df.index[0], self.df.index[-1]])
 
         return axs
@@ -482,6 +489,12 @@ class AutoFluxRope(object):
         """
         
         # Cut a chunk of data near the crossing, according to the window specified.
+        
+        # FILTER:
+        # To save time and get the best data. We concentrate on certain radial ranges and local times
+        if magdata.df.loc[crossing, 'R'] > 100 * R_JUPITER or magdata.df.loc[crossing, 'LT'] > 5:
+            return None
+        
         # FILTER 1: Select based on window size < 10 min.
         df = magdata.df.loc[crossing - dt.timedelta(minutes=window): 
                             crossing + dt.timedelta(minutes=window)].copy()
@@ -533,7 +546,7 @@ class AutoFluxRope(object):
                 end = positive
                 
             # FILTER : We don't want any events which are 0.5 times or larger than the total window.
-            if (end - start) > dt.timedelta(minutes=window) or (end - start) < dt.timedelta(seconds=10):
+            if (end - start) > dt.timedelta(minutes=0.5*window) or (end - start) < dt.timedelta(seconds=10):
                 continue
                 
             # FILTER : We don't want a minor excursion into the negative values

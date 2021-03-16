@@ -6,6 +6,8 @@ import numpy as np
 import datetime as dt
 import pandas as pd
 
+R_JUPITER = 71492
+
 PDS_URL = 'https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/'
 
 DATASETS = {

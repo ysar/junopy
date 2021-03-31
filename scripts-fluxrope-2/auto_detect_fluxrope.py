@@ -14,6 +14,8 @@ import glob
 import time
 import numpy as np
 import datetime as dt
+import matplotlib
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import pandas as pd
 import copy
@@ -126,7 +128,7 @@ def plot_mva_composite(filename, start, end, saveplot=False):
     # 2. Plot the MVA B vectors. -------------------------------------------------------
     ax_mvaB = magdata_mva.plot(vars=['B1', 'B2', 'B3'], axs=ax_mvaB)
     timearray2, tickstring2 = find_ticks_between(magdata_mva.df.index[0], magdata_mva.df.index[-1])
-    ylabels = ['B$_1$', 'B$_2$', 'B$_3$']
+    ylabels = ['B$_L$', 'B$_M$', 'B$_N$']
     for i, a in enumerate(ax_mvaB):
         a.set_xticks([])
         a.set_xticks(timearray2)
@@ -173,10 +175,10 @@ def plot_mva_composite(filename, start, end, saveplot=False):
         a.label_outer()
     
     ax_hodo[0].legend(loc='upper right')
-    ax_hodo[0].set_xlabel('B$_3$ (nT)')
-    ax_hodo[0].set_ylabel('B$_1$ (nT)')
-    ax_hodo[1].set_xlabel('B$_3$ (nT)')
-    ax_hodo[1].set_ylabel('B$_2$ (nT)')
+    ax_hodo[0].set_xlabel('B$_N$ (nT)')
+    ax_hodo[0].set_ylabel('B$_L$ (nT)')
+    ax_hodo[1].set_xlabel('B$_N$ (nT)')
+    ax_hodo[1].set_ylabel('B$_M$ (nT)')
         
     # 4. Add Text ----------------------------------------------------------------------
     ax_text.axis('off')
@@ -187,12 +189,12 @@ def plot_mva_composite(filename, start, end, saveplot=False):
     text.append(dt.datetime.strftime(date, '%Y-%m-%d') + ', DOY={:s}'.format(dt.datetime.strftime(date, '%j')))
     text.append('\n\n')
     text.append('MVA Output:\n--------\n\nCartesian Eigenvectors:\n')
-    text.append('x$_1$ = ({:.2f}, {:.2f}, {:.2f})\n'.format(magdata_mva.x1[0], magdata_mva.x1[1], magdata_mva.x1[2]))
-    text.append('x$_2$ = ({:.2f}, {:.2f}, {:.2f})\n'.format(magdata_mva.x2[0], magdata_mva.x2[1], magdata_mva.x2[2]))
-    text.append('x$_3$ = ({:.2f}, {:.2f}, {:.2f})\n\n'.format(magdata_mva.x3[0], magdata_mva.x3[1], magdata_mva.x3[2]))
+    text.append('x$_L$ = ({:.2f}, {:.2f}, {:.2f})\n'.format(magdata_mva.x1[0], magdata_mva.x1[1], magdata_mva.x1[2]))
+    text.append('x$_M$ = ({:.2f}, {:.2f}, {:.2f})\n'.format(magdata_mva.x2[0], magdata_mva.x2[1], magdata_mva.x2[2]))
+    text.append('x$_N$ = ({:.2f}, {:.2f}, {:.2f})\n\n'.format(magdata_mva.x3[0], magdata_mva.x3[1], magdata_mva.x3[2]))
     text.append('--------\nRatio of eigenvalues:\n')
-    text.append('$\lambda_3$ / $\lambda_2$ = {:.2f}\n'.format(magdata_mva.eigval[2] / magdata_mva.eigval[1]))
-    text.append('$\lambda_2$ / $\lambda_1$ = {:.2f}\n'.format(magdata_mva.eigval[1] / magdata_mva.eigval[0]))
+    text.append('$\lambda_N$ / $\lambda_M$ = {:.2f}\n'.format(magdata_mva.eigval[2] / magdata_mva.eigval[1]))
+    text.append('$\lambda_M$ / $\lambda_L$ = {:.2f}\n'.format(magdata_mva.eigval[1] / magdata_mva.eigval[0]))
     text.append('$P = {:.2f}$\n'.format(magdata_mva.P))
     text = ''.join(text)
     ax_text.text(0.5, 0.5, text, horizontalalignment='center', verticalalignment='center',
@@ -202,7 +204,7 @@ def plot_mva_composite(filename, start, end, saveplot=False):
                    ))
     
     if saveplot:
-        plotfile = 'out_mva/' + dt.datetime.strftime(start, '%Y-%jT%H:%M:%S')
+        plotfile = '20210329/mva/' + dt.datetime.strftime(start, '%Y-%jT%H:%M:%S')
         fig.savefig(plotfile)
         plt.close(fig)
         
@@ -214,9 +216,9 @@ if __name__ == '__main__':
     allfiles = glob.glob('data/mag/*.hdf5')
     nfiles = len(allfiles)
     
-    with open('auto_plasmoid_list.csv', 'w') as f:
+    with open('auto_plasmoid_list_20210329_window10.csv', 'w') as f:
         
-        f.write('Start, End\n')
+        f.write('Start, End, Motion, PlasmoidType\n')
         
         for ifile, filename in enumerate(allfiles):
             
@@ -243,10 +245,31 @@ if __name__ == '__main__':
             for tstart, tend in zip(ts, te):
                 
                 if tstart and tend:
-                    f.write('{:s}, {:s}\n'.format(tstart.strftime('%Y-%jT%H:%M:%S'), tend.strftime('%Y-%jT%H:%M:%S')))
+                    
+                    if magdata.df.loc[tstart, 'Btheta'] < 0:
+                        motion = 'planetward'
+                    else:
+                        motion = 'tailward'
+                        
+                    magdata_mva = MagData(filename=filename)
+                    magdata_mva.df = magdata_mva.df.loc[tstart:tend].copy()
+                    magdata_mva.perform_mva()
+                        
+                    if np.abs(magdata_mva.df['B2'].median()) > np.abs(magdata_mva.df.loc[tstart, 'B2']) and \
+                       np.abs(magdata_mva.df['B2'].median()) > np.abs(magdata_mva.df.loc[tend, 'B2']):
+                        plasmoidtype = 'flux-rope'
+                    else:
+                        plasmoidtype = 'o-line'
+                    
+                    print(motion, plasmoidtype)
+                    
+                    f.write('{:s}, {:s}, {:s}, {:s}\n'.format(
+                        tstart.strftime('%Y-%jT%H:%M:%S'), 
+                        tend.strftime('%Y-%jT%H:%M:%S'),
+                        motion,
+                        plasmoidtype))
 
                     # 4. For each plasmoid event, perform MVA and save plot.
                     plot_mva_composite(filename, tstart, tend, saveplot=True)
-        
-        
+
                 # raise Exception('Check plot.')

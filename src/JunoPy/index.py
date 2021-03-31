@@ -110,7 +110,7 @@ class IndexFile(object):
 
         filelist = [x.strip() for x in df_masked['FILE_SPECIFICATION_NAME']]
 
-        if DoDownload:
+        if DoDownload and len(filelist) > 0:
             urls = []
 
             for f in filelist:

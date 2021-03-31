@@ -125,7 +125,7 @@ class JediData(object):
 
         size = 0.02
         bbox = ax.get_position()
-        cax = ax.figure.add_axes([bbox.x1, bbox.y0, 0.02, bbox.y1- bbox.y0])
+        cax = ax.figure.add_axes([bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
         cbar = ax.figure.colorbar(mp, cax=cax)
         # cbar.set_label('counts/s/cm$^2$/str/keV', rotation=270, labelpad=10.0)
         
@@ -277,18 +277,21 @@ class JediData(object):
 
         # c = pd.to_datetime(x_pa, unit='ns')
 
-        mp = ax.hist2d(x_pa, y_pa, bins=[nbins, 18], weights=weights, cmin=0.5, cmap=cmap, vmin=vmin, vmax=vmax) # norm=colors.LogNorm(vmin=vmin, vmax=vmax))
-
+        mp = ax.hist2d(x_pa, y_pa, bins=[nbins, 18], weights=weights, cmin=0.5, cmap=cmap, norm=colors.LogNorm(vmin=vmin, vmax=vmax))
+        
         xticks = np.linspace(x_pa[0], x_pa[-1], 6)
         
         ax.set_ylim([0, 180])
-        ax.set_ylabel('PA $^\circ$')
+        if 'ion' in self.species:
+            ax.set_ylabel('H$^+$\n' + 'PA $^\circ$')
+        else:
+            ax.set_ylabel('{:s}\n'.format(self.species) + 'PA $^\circ$')
         ax.set_yticks([0, 90, 180])
 
 
         size = 0.02
         bbox = ax.get_position()
-        cax = ax.figure.add_axes([bbox.x1, bbox.y0, 0.02, bbox.y1- bbox.y0])
+        cax = ax.figure.add_axes([bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
         cbar = ax.figure.colorbar(mp[3], cax=cax)
         # cbar.set_label('counts/s/cm$^2$/str/keV', rotation=270, labelpad=10.0)
 
@@ -297,15 +300,19 @@ class JediData(object):
         
 def merge_data_species(data, species):
     """Given various JediData objects for the same species, merge them."""
-    
+
     data_merge = JediData()
     
-    data_merge.df = pd.merge_ordered(data[0].df, data[1].df, on='time')
-    data_merge.metadata = pd.merge_ordered(data[0].metadata, data[1].metadata, on='channels')
+    if len(data) == 1:
+        data_merge.df = data[0].df
+        data_merge.metadata = data[0].metadata
+    else:
+        data_merge.df = pd.merge_ordered(data[0].df, data[1].df, on='time')
+        data_merge.metadata = pd.merge_ordered(data[0].metadata, data[1].metadata, on='channels')
 
-    # Merge fluxes from same energy channels. 
-    for channel in data_merge.metadata['channels']:
-        data_merge.df[channel] = data_merge.df[channel + '_x'] + data_merge.df[channel + '_y']
+        # Merge fluxes from same energy channels. 
+        for channel in data_merge.metadata['channels']:
+            data_merge.df[channel] = data_merge.df[channel + '_x'] + data_merge.df[channel + '_y']
         
     # Set time as index
     data_merge.df.set_index(['time'], inplace=True)

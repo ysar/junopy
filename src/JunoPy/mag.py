@@ -129,12 +129,14 @@ class MagData(object):
         """
         Plot magnetometer data. Returns an axes object.
         """
-        var_string = {
-            'Btheta': r'$B_\theta$',
-            'Bphi': r'$B_\phi$',
-            'Br': r'$B_r$',
-            'Bmag': r'|B|'
-        }
+        
+        if 'Btheta' in vars:
+            var_string = {
+                'Btheta': r'$B_\theta$',
+                'Bphi': r'$B_\phi$',
+                'Br': r'$B_r$',
+                'Bmag': r'|B|'
+            }
         for i, ax in enumerate(axs):
             
             ax.plot(self.df.index, self.df[vars[i]], color='k', lw=0.75)
@@ -149,8 +151,11 @@ class MagData(object):
                 
             if Bfit:
                 ax.plot(self.df.index, self.df['Bfit_' + chr(i + 120)], color='b', lw=0.7)
-
-            ax.set_ylabel(var_string[vars[i]] + ' (nT)')
+            
+            if 'Btheta' in vars:
+                ax.set_ylabel(var_string[vars[i]] + ' (nT)')
+            else:
+                ax.set_ylabel(vars[i] + ' (nT)')
             # ax.set_xlim([self.df.index[0], self.df.index[-1]])
 
         return axs
@@ -492,7 +497,7 @@ class AutoFluxRope(object):
         
         # FILTER:
         # To save time and get the best data. We concentrate on certain radial ranges and local times
-        if magdata.df.loc[crossing, 'R'] > 100 * R_JUPITER or magdata.df.loc[crossing, 'LT'] > 5:
+        if magdata.df.loc[crossing, 'R'] > 90 * R_JUPITER or magdata.df.loc[crossing, 'LT'] > 5:
             return None
         
         # FILTER 1: Select based on window size < 10 min.
@@ -552,7 +557,7 @@ class AutoFluxRope(object):
             # FILTER : We don't want a minor excursion into the negative values
             bthetapos = np.abs(df.loc[crossing, 'Btheta'] - df.loc[start, 'Btheta'])
             bthetaneg = np.abs(df.loc[end, 'Btheta'] - df.loc[crossing, 'Btheta'])
-            if (bthetapos / bthetaneg > 2 or bthetaneg / bthetapos > 2):
+            if (bthetapos / bthetaneg > 4 or bthetaneg / bthetapos > 4):
                 continue
             
                 
@@ -578,7 +583,7 @@ class AutoFluxRope(object):
             # FILTER 4: MVA based filters. 
             magdata_mva = copy.copy(magdata)
             magdata_mva.df = magdata_mva.df.loc[start:end].copy()
-            if (magdata_mva.df['Br'].abs().mean() > 3 or magdata_mva.df['Br'].abs().median() > 3):
+            if (magdata_mva.df['Br'].abs().mean() > 2 or magdata_mva.df['Br'].abs().median() > 2):
                 continue
             magdata_mva.perform_mva()
             

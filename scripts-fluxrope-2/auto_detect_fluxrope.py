@@ -61,7 +61,7 @@ def plot_magdata_line(magdata, ts, te, saveplot=False):
                 ', DOY={:s}'.format(dt.datetime.strftime(ts[0], '%j')), y=0.92)
     
     if saveplot:
-        fig.savefig('out_auto_fluxrope/' + dt.datetime.strftime(ts[0], '%Y-%j') + '_lines.png')
+        fig.savefig('20210525/out_auto_fluxrope/' + dt.datetime.strftime(ts[0], '%Y-%j') + '_lines.png')
         plt.close(fig)
 
 
@@ -204,7 +204,7 @@ def plot_mva_composite(filename, start, end, saveplot=False):
                    ))
     
     if saveplot:
-        plotfile = '20210329/mva/' + dt.datetime.strftime(start, '%Y-%jT%H:%M:%S')
+        plotfile = '20210525/mva/' + dt.datetime.strftime(start, '%Y-%jT%H:%M:%S')
         fig.savefig(plotfile)
         plt.close(fig)
         
@@ -216,7 +216,7 @@ if __name__ == '__main__':
     allfiles = glob.glob('data/mag/*.hdf5')
     nfiles = len(allfiles)
     
-    with open('auto_plasmoid_list_20210329_window10.csv', 'w') as f:
+    with open('auto_plasmoid_list_20210525_window10.csv', 'w') as f:
         
         f.write('Start, End, Motion, PlasmoidType\n')
         

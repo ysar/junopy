@@ -46,37 +46,22 @@ def plot_data(magdata, ion_data=None, electron_data=None, start=None, end=None, 
     
     if ion_data:
         ion_data.plot_flux_spectra(ax=axs[4])
-        xticks = ion_data.plot_pitchangle_spectra(ax=axs[6], vmin=1e5, vmax=1e7, cmap='jet')
+        # ion_data.plot_pitchangle_scatter(ax=axs[6], size=3.)
+        ion_data.plot_pitchangle_scatter(ax=axs[6], size=2 )
     
     if electron_data:
-        electron_data.plot_flux_spectra(ax=axs[5])   
-        xticks = electron_data.plot_pitchangle_spectra(ax=axs[7], vmin=1e5, vmax=1e7, cmap='jet')
-        
-        
+        electron_data.plot_flux_spectra(ax=axs[5])
+        # electron_data.plot_pitchangle_scatter(ax=axs[7], size=3.)
+        electron_data.plot_pitchangle_scatter(ax=axs[7], size=2)
     
-    for a in axs[:-2]:
+    for a in axs:
         a.set_xlim([timearray[0], timearray[-1]])
         a.set_xticks(timearray)
         a.set_xticklabels(tickstring)
         a.label_outer()
         a.axvline(sevent, ls='dotted', color='r') # [0.2, 0.2, 0.2])
         a.axvline(eevent, ls='dotted', color='r')
-        
-    for a in axs[-2:]:
-        
-        start_int = np.datetime64(start).astype('int64') * 1000
-        end_int = np.datetime64(end).astype('int64') * 1000
-        a.set_xlim([start_int, end_int])
-        a.set_xticks(xticks)
-        a.set_xticklabels(tickstring)
-        a.label_outer()
-
-        
-    for a in axs[-2:]:
-        start_int = np.datetime64(sevent).astype('int64') * 1000
-        end_int = np.datetime64(eevent).astype('int64') * 1000
-        a.axvline(start_int, ls='dotted', color='r', zorder=3)
-        a.axvline(end_int, ls='dotted', color='r', zorder=3)
+            
             
     annotations = ['a)', 'b)', 'c)', 'd)', 'e)', 'f)', 'g)', 'h)']
     for i, a in enumerate(axs):
@@ -84,26 +69,26 @@ def plot_data(magdata, ion_data=None, electron_data=None, start=None, end=None, 
              a.text(0.96, 0.8, annotations[i], transform=a.transAxes, weight='bold')
         else:
             a.text(0.96, 0.8, annotations[i], transform=a.transAxes, color='r', weight='bold')
-            
+        
+    axs[4].text(1.1, -0.7, r'counts/s/cm$^2$/str/keV', transform=axs[4].transAxes, rotation=90)
+    axs[6].text(1.1, -0.6, r'counts/s/cm$^2$/str', transform=axs[6].transAxes, rotation=90)
+        
     a.tick_params(axis='x', width=2, rotation=0)
     a.xaxis.label.set_visible(False)
     
     plt.suptitle(dt.datetime.strftime(start, '%Y-%m-%d') + \
                  ', DOY={:s}'.format(dt.datetime.strftime(start, '%j')), y=0.92)
     
-    if outfolder:
-        fig.savefig(outfolder + dt.datetime.strftime(start, '%Y-%jT%H:%M') + '.png')
-        plt.close(fig)
-    
-    fig.savefig('20210329/jedi/' + dt.datetime.strftime(start, '%Y-%jT%H:%M') + '.png')
+    fig.savefig('20210525/jedi/' + dt.datetime.strftime(start, '%Y-%jT%H:%M') + '.png')
     plt.close(fig)
 
 # --------------------------------------------------------------------
 if __name__ == '__main__':
     
-    for startevent, endevent in read_csv('auto_plasmoid_list_20210329_window10.csv'):
+    for startevent, endevent in read_csv('auto_plasmoid_list_20210525_window10.csv'):
         
         try:
+            
             print('Working on - {:}'.format(startevent))
             start = startevent - dt.timedelta(minutes=20)
             end   = endevent + dt.timedelta(minutes=20)
@@ -143,23 +128,18 @@ if __name__ == '__main__':
                 else:
                     ion_data.append(jdata)
 
-            try:
+            if len(ion_data) > 1:
                 ion_data = merge_data_species(ion_data, species='ion')
-            except IndexError:
-                pass
+            else:
+                ion_data = ion_data[0]
 
-            try:
+            if len(electron_data) > 1:
                 electron_data = merge_data_species(electron_data, species='electron')
-            except IndexError:
-                pass
+            else:
+                electron_data = electron_data[0]
 
-            try:
-                plot_data(magdata, ion_data=ion_data, electron_data=electron_data, start=start, end=end, sevent=startevent, eevent=endevent)
-            except:
-                print('Couldnt plot file - {:}'.format(startevent))
-                pass
 
-            print('--------')
+            plot_data(magdata, ion_data=ion_data, electron_data=electron_data, start=start, end=end, sevent=startevent, eevent=endevent)
         
         except:
             continue

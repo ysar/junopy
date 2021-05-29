@@ -227,60 +227,121 @@ class JediData(object):
     
     
     
-    def plot_pitchangle_scatter(self, ax):
+    def plot_pitchangle_scatter(self, ax, size=0.5):
         """
         Plot the pitchangle scatter for the current dataset on the ax.
         """
-        chars = ['x', 'y', 'z']
+        if self.nfiles > 1:
+            chars = ['_x', '_y', '_z']
+        else:
+            chars = ['']
 
         for j in range(self.nfiles):
             for i in range(self.nSSD):
                 mp = ax.scatter(
                     self.df.index, 
-                    self.df['Pitch_Angle_T{:d}_{:s}'.format(i, chars[j])],
-                    c=self.df['BroadbandFlux_T{:d}_{:s}'.format(i, chars[j])],
-                    s=0.5,
+                    self.df['Pitch_Angle_T{:d}{:s}'.format(i, chars[j])],
+                    c=self.df['BroadbandFlux_T{:d}{:s}'.format(i, chars[j])],
+                    s=size,
                     marker='s',
                     cmap='jet', 
                     norm=colors.LogNorm(vmin=10**4, vmax=10**6))
-
+        
         ax.set_ylim([0, 180])
-        ax.set_ylabel('PA ($^\circ$)')
+        if 'ion' in self.species:
+            ax.set_ylabel('H$^+$\n' + 'PA $^\circ$')
+        else:
+            ax.set_ylabel('{:s}\n'.format(self.species) + 'PA $^\circ$')
+        ax.set_yticks([0, 90, 180])
 
         size = 0.02
         bbox = ax.get_position()
-        cax = ax.figure.add_axes([bbox.x1, bbox.y0, 0.02, bbox.y1- bbox.y0])
+        cax = ax.figure.add_axes([bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
         cbar = ax.figure.colorbar(mp, cax=cax)
         # cbar.set_label('counts/s/cm$^2$/str/keV', rotation=270, labelpad=10.0)
 
     
     def plot_pitchangle_spectra(self, ax, start=None, end=None, nticks=6, vmin=1e5, vmax=5e6, cmap='coolwarm'):
         """
-        Plot the pitch angle spectra using hist2D . 
+        Plot the pitch angle spectra .
+        
+        We need to use pcolormesh for better control.
+        pcolormesh uses three main inputs:
+            X[i, j] - X[i+1, j], array of N + 1, M + 1 points
+            Y[i, j] - Y[i, j+1], array of N + 1, M + 1 points
+            C[i, j], array of N, M points
+            
+        We can contruct X and Y on our own using the timedeltas and specific pitch angles.
+        
+        For C , we need to know the number of measurements within a given time period and pitch angle interval.  
+        
         """
-        chars = ['x', 'y', 'z']
+        if self.nfiles > 1:
+            chars = ['_x', '_y', '_z']
+        else:
+            chars = ['']
     
         if start and end:
-            nbins = int((end - start).total_seconds() / 60)
+            n_times = int((end - start).total_seconds() / 60) 
+            time_array = pd.date_range(
+                start=start, end=end, periods=n_times + 1).to_pydatetime().tolist()
         else:
-            nbins = int((self.df.index[-1]- self.df.index[0]).total_seconds() / 60)
-
-        x_pa = np.array([], dtype=object)
-        y_pa = np.array([])
-        weights = np.array([])
+            n_times = int((self.df.index[-1] - self.df.index[0]).total_seconds() / 60) 
+            time_array = pd.date_range(
+                start=self.df.index[0], end=self.df.index[-1], periods=n_times + 1).to_pydatetime().tolist()    # Time array returns list
+        
+        n_angles = 18
+        pitch_angle_array = np.linspace(0, 180, n_angles + 1)
+        
+        X, Y = np.meshgrid(time_array, pitch_angle_array)   # The size for the meshgrid is (N + 1) x (M + 1)
+        
+        C = np.zeros((n_angles, n_times))                                 # There is a weird transpose that happens after meshgrid. 
+        
+        """
+        Now we need to construct C. For this we need to loop over each time bin, and each pitch angle bin.
+        We need to collect all data points from all files and SSDs which lie inside this 2D bin. 
+        We will collect the number of data points (npoints) within the bin and the Broadband Flux (broadbandflux).
+        """
+        times_all = np.array([], dtype=object)
+        pa_all = np.array([])
+        flux_all = np.array([])
 
         for j in range(self.nfiles):
             for iax in range(self.nSSD):
-                x_pa = np.concatenate((x_pa, self.df.index.values))
-                y_pa = np.concatenate((y_pa, self.df['Pitch_Angle_T{:d}_{:s}'.format(iax, chars[j])].to_numpy()))
-                weights = np.concatenate((weights, self.df['BroadbandFlux_T{:d}_{:s}'.format(iax, chars[j])].to_numpy())) 
-
-        # c = pd.to_datetime(x_pa, unit='ns')
-
-        mp = ax.hist2d(x_pa, y_pa, bins=[nbins, 18], weights=weights, cmin=0.5, cmap=cmap, norm=colors.LogNorm(vmin=vmin, vmax=vmax))
+                times_all = np.concatenate((times_all, self.df.index.values))
+                pa_all = np.concatenate((pa_all, self.df['Pitch_Angle_T{:d}{:s}'.format(iax, chars[j])].to_numpy()))
+                flux_all = np.concatenate((flux_all, self.df['BroadbandFlux_T{:d}{:s}'.format(iax, chars[j])].to_numpy()))
         
-        xticks = np.linspace(x_pa[0], x_pa[-1], 6)
         
+        times = np.zeros(len(times_all), dtype=object)                     # Quick fix for numpy / datetime incompatibilities.
+        for i in range(len(times_all)):
+            times[i] = dt.datetime.utcfromtimestamp(times_all[i] / 1e9)
+            
+            
+        npoints_array = np.zeros((n_angles, n_times))
+        bbandflux_array = np.zeros((n_angles, n_times))
+        
+        for i in range(n_times):
+            
+            pa_filter = pa_all[(times > time_array[i]) & (times <= time_array[i + 1])]
+            flux_filter = flux_all[(times > time_array[i]) & (times <= time_array[i + 1])]
+            
+            for j in range(n_angles):
+                
+                flux = flux_filter[(pa_filter > pitch_angle_array[j]) & (pa_filter <= pitch_angle_array[j + 1])] 
+                
+                npoints_array[j, i] = len(flux)
+                bbandflux_array[j, i] = np.sum(flux)
+                
+        
+        npoints_array /= np.sum(npoints_array)
+        
+        C = bbandflux_array * 1.0 # / npoints_array
+        
+        mp = ax.pcolormesh(X, Y, C, cmap=cmap, norm=colors.LogNorm(vmin=vmin, vmax=vmax))
+
+         # c = pd.to_datetime(x_pa, unit='ns')
+            
         ax.set_ylim([0, 180])
         if 'ion' in self.species:
             ax.set_ylabel('H$^+$\n' + 'PA $^\circ$')
@@ -292,10 +353,8 @@ class JediData(object):
         size = 0.02
         bbox = ax.get_position()
         cax = ax.figure.add_axes([bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
-        cbar = ax.figure.colorbar(mp[3], cax=cax)
-        # cbar.set_label('counts/s/cm$^2$/str/keV', rotation=270, labelpad=10.0)
+        cbar = ax.figure.colorbar(mp, cax=cax)
 
-        return xticks
     
         
 def merge_data_species(data, species):

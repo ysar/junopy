@@ -123,8 +123,17 @@ class MagData(object):
 
         self.df['Bphi'] = - np.sin(phi) * self.df['Bx'] + \
             np.cos(phi) * self.df['By']
-
-
+    
+    
+    def calculate_bendback(self):
+        """
+        Calculate bendback angle alpha.
+        Note : tan(alpha) / R = (B_phi / (R * B_R)) is often plotted.
+        alpha is the angle between the magnetic field in the (R, phi) plane and the radial direction.
+        """
+        self.df['alpha'] = np.arctan2(self.df['Bphi'], self.df['Br']) * 180 / np.pi
+    
+    
     def plot(self, vars=None, axs=None, Bfit=None):
         """
         Plot magnetometer data. Returns an axes object.
@@ -135,8 +144,13 @@ class MagData(object):
                 'Btheta': r'$B_\theta$',
                 'Bphi': r'$B_\phi$',
                 'Br': r'$B_r$',
-                'Bmag': r'|B|'
+                'Bmag': r'|B|',
             }
+        
+        if 'alpha' in vars:
+            var_string.update({'alpha': r'$\alpha'})
+        # print(var_string)
+        
         for i, ax in enumerate(axs):
             
             ax.plot(self.df.index, self.df[vars[i]], color='k', lw=0.75)
@@ -154,6 +168,8 @@ class MagData(object):
             
             if 'Btheta' in vars:
                 ax.set_ylabel(var_string[vars[i]] + ' (nT)')
+            elif 'alpha' in vars:
+                ax.set_ylabel(var_string[vars[i]] + '$^\circ$')
             else:
                 ax.set_ylabel(vars[i] + ' (nT)')
             # ax.set_xlim([self.df.index[0], self.df.index[-1]])
@@ -557,7 +573,7 @@ class AutoFluxRope(object):
             # FILTER : We don't want a minor excursion into the negative values
             bthetapos = np.abs(df.loc[crossing, 'Btheta'] - df.loc[start, 'Btheta'])
             bthetaneg = np.abs(df.loc[end, 'Btheta'] - df.loc[crossing, 'Btheta'])
-            if (bthetapos / bthetaneg > 4 or bthetaneg / bthetapos > 4):
+            if (bthetapos / bthetaneg > 6 or bthetaneg / bthetapos > 6):
                 continue
             
                 
@@ -587,16 +603,16 @@ class AutoFluxRope(object):
                 continue
             magdata_mva.perform_mva()
             
-            if magdata_mva.x3[2] < 0.8:
+            if np.abs(magdata_mva.x3[2]) < 0.8:
                 continue
             
             if magdata_mva.P < 4.5:    # Degeneracy test based on Oleviera et al. 2020
                 continue
                 
-            if (magdata_mva.eigval[2] / magdata_mva.eigval[1] < 3) or (magdata_mva.eigval[1] / magdata_mva.eigval[0] < 3):
+            if (np.abs(magdata_mva.eigval[2] / magdata_mva.eigval[1]) < 3) or (np.abs(magdata_mva.eigval[1] / magdata_mva.eigval[0]) < 3):
                 continue
                 
-            if (magdata_mva.df['B1'].mean() > 2 or magdata_mva.df['B1'].median() > 2):
+            if (magdata_mva.df['B1'].abs().mean() > 2 or magdata_mva.df['B1'].abs().median() > 2):
                 continue
                 
                 

@@ -1,398 +1,462 @@
+
 import os
 import numpy as np
 import pandas as pd
 import datetime as dt
+
+
+from matplotlib import ticker
 import matplotlib.colors as colors
 
-def create_jedi_metadata(columns, lowE, highE, particletype):
-    """Return metadata for the datafile."""
 
-    df = pd.DataFrame()
-    df['channels'] = columns
-    df['indices'] = df.index.values
-    
-    # Filter only the FLUX columns
-    df = df[df['channels'].str.contains("FLUX")]
-    
-    # Get the indices for the filtered columns
-    indices = [int(x) for x in df['indices'].values]
-    
-    # Get other metadata for the filtered columns
-    df['particletype'] = [particletype[x] for x in indices]
-    df['lowEbins'] = [float(lowE[x]) for x in indices]
-    df['highEbins'] = [float(highE[x]) for x in indices]
-    
-    df = df[~df['particletype'].str.contains("NONPARTICLE")]
-
-    return df
-    
-
-class JediData(object):
+class JediData:
     
     nSSD = 6
-    isMerged = False
-    nfiles = 1
-    species = 'ion'
+    pitchangles = np.linspace(0, 170, 18)
     
-    def __init__(self, filename=None):
+    def __init__(self, filename=None, start=None, end=None, species=None, dtbin='T'):
         """
-        Class to read in JEDI data.
+        Class to read and do things with a SINGLE JEDI data file.
         """
-        if filename:
-            self.filename = filename
-            self.parse_jedi_file()
-
-
-    def parse_jedi_file(self):
-        """
-        Method to parse a JEDI data file (.csv) format
-        """
-        with open(self.filename, 'r') as f:
-
-            columns = f.readline()
-            columns = [x.strip() for x in columns.split(',')]
-
-            low_E_limit = f.readline()
-            low_E_limit = [x.strip() for x in low_E_limit.split(',')]
-
-            high_E_limit = f.readline()
-            high_E_limit = np.array([
-                x.strip() for x in high_E_limit.split(',')]) # if x.strip()])
-
-            particle_type = f.readline()
-            particle_type = [
-                x.strip() for x in particle_type.split(',')]#  if x.strip()]
-
-            assert (len(low_E_limit) == \
-                    len(high_E_limit) == \
-                    len(particle_type))
-
+        
+        if not filename:   # Useful for creating empty JediData object.
+            return None
+        
+        self.filename = filename
+        
+        self.species = species
+        
+        self.dtbin = dtbin
+        
+        self.read_csv_file()
+        
+        if start and end:
+            
+            
+            self.df_raw = self.df_raw.loc[start.strftime('%Y-%m-%d %H:%M:%S'):
+                                          end.strftime('%Y-%m-%d %H:%M:%S')]
+            
+        self.process_data()
+            
+    
+    def read_csv_file(self, dtype='FLUX'):
+        
+         with open(self.filename, 'r') as f:
+        
+            channel_names = \
+                [x.strip() for x in f.readline().split(',')]
+            ebin_lows = [x.strip() for x in f.readline().split(',')]
+            ebin_highs = [x.strip() for x in f.readline().split(',')]
+            particle_type = [x.strip() for x in f.readline().split(',')]
+            
             f.readline()
+            
+            self.create_jedi_metadata(
+                channel_names, ebin_lows, ebin_highs, particle_type, dtype=dtype)
+            
+            self.df_raw = pd.read_csv(self.filename, names=channel_names, skiprows=5)
+            
+            self.df_raw['time'] = self.df_raw.apply(
+                lambda x: dt.datetime.strptime(x['UTC'], '%Y-%m-%dT%H:%M:%S'), axis=1)
         
-        self.metadata = create_jedi_metadata(columns, low_E_limit, high_E_limit, particle_type)
+            self.df_raw.drop('UTC', 1, inplace=True)
+            self.df_raw.set_index(['time'], inplace=True)
+            self.df_raw.sort_index(inplace=True)
+            
+            
+    def create_jedi_metadata(self, columns, lowE, highE, particletype, dtype='FLUX'):
+        """Return metadata for the datafile."""
         
-        self.df = pd.read_csv(self.filename, names=columns, skiprows=5)
-
-        self.df['time'] = self.df.apply(
-            lambda x: dt.datetime.strptime(x['UTC'], '%Y-%m-%dT%H:%M:%S'),
-            axis=1)
+        df = pd.DataFrame()
+        df['channels'] = columns
+        df['indices'] = df.index.values
         
-        self.df = self.df.drop('UTC', 1)
-        self.df.set_index(['time'], inplace=True)
-
-
-
-
-
-    def plot_flux_spectra(self, ax, vmin=100, vmax=1e4, cmap='jet'):
-        """
-        Type Plot -
-                P_PitchAngle, P_EvsTime, Heavy_PitchAngle, Heavy_EvsTime
-        """
-        import matplotlib.colors as colors
-
-        self.df['endtime'] = self.df.apply(lambda x: x.name + dt.timedelta(seconds=x['Duration']), axis=1)
-
-        x = np.zeros(len(self.df) + 1, dtype=object)
-        x[:-1] = self.df.index
-        x[-1] = self.df['endtime'][-1]
+        df = df[df['channels'].str.contains(dtype)]
+            
+        indices = [int(x) for x in df['indices'].values]
         
+        df['particletype'] = [particletype[x] for x in indices]
+        df['lowEbins'] = [float(lowE[x]) for x in indices]
+        df['highEbins'] = [float(highE[x]) for x in indices]
+            
+        df = df[~df['particletype'].str.contains('NONPARTICLE')]
+        
+        df.reset_index(inplace=True)
+        
+        
+        if self.species == 'ELECTRON':
+            filter_string = df['channels'][0][-7:]    # Filter lowest E channel for e-.
+            df = df[~df['channels'].str.contains(filter_string)]
+            filter_string = df['channels'][1][-7:]    # Filter lowest2 E channel for e-.
+            df = df[~df['channels'].str.contains(filter_string)]
+            filter_string = df['channels'][2][-7:]    # Filter lowest3 E channel for e-.
+            df = df[~df['channels'].str.contains(filter_string)]
+            filter_string = df['channels'][3][-7:]    # Filter lowest3 E channel for e-.
+            df = df[~df['channels'].str.contains(filter_string)]
+            
+        if self.species == 'PROTON':
+            filter_string = df['channels'][0][-7:]    # Filter lowest E channel for H+.
+            df = df[~df['channels'].str.contains(filter_string)]
+            
+        if self.species in ['O\+S', 'OXYGEN', 'SULFUR']:
+            df = df[df['particletype'].str.contains(self.species)]
+            
+        if self.species == 'O\+S':
+            self.species = 'O+S'
+        else:
+            self.species = self.species.lower()
+            
+        self.metadata = df
+        
+    
+    def process_data(self, start=None, end=None):
+        """From the raw data, process the data into a cleaner format."""
+        
+        # Create pandas dataframe with Energy / time 
+        collect_durations = self.df_raw['Duration'].values
+        
+#         if self.dtbin == 'T':
+#             self.energytime = self.df_raw[self.metadata['channels']]\
+#                 .apply(lambda x: x * collect_durations, axis=0)\
+#                 .resample('T', offset='30S')\
+#                 .sum()\
+#                 .apply(lambda x: x / 60 / (4 * np.pi), axis=0)
+            
+#         elif self.dtbin == '30S':
+#             self.energytime = self.df_raw[self.metadata['channels']]\
+#                 .apply(lambda x: x * collect_durations, axis=0)\
+#                 .resample('30S', offset='15S')\
+#                 .sum()\
+#                 .apply(lambda x: x / 30 / (4 * np.pi), axis=0)
+            
+        if self.dtbin == 'T':
+            self.energytime = self.df_raw[self.metadata['channels']]\
+                .resample('T', offset='30S')\
+                .mean()
+            
+        elif self.dtbin == '30S':
+            self.energytime = self.df_raw[self.metadata['channels']]\
+                .resample('30S', offset='15S')\
+                .mean()
 
-        columns = [x for x in self.metadata['channels']]
-        freq_lower, freq_upper = self.create_new_energy_bins()
+        
+        # Create energy bins manually based on the largest allowable bins based on min and max.
+        
+        if len(self.metadata) % self.nSSD != 0:
+            raise Exception('Unequal channels among SSDs')
+            
+        n_energybins = len(self.metadata) // self.nSSD
+        
+        lowE  = self.metadata['lowEbins'].to_numpy() 
+        highE = self.metadata['highEbins'].to_numpy()
+        
+        self.energybins_low = lowE[:n_energybins]
+        self.energybins_high = highE[:n_energybins]
+            
+        for j in range(1, self.nSSD):
 
-        y = np.zeros(len(freq_lower) * 2)
-        j = 0
-        for k in range(len(freq_lower)):
-            y[j] = float(freq_lower[k])
-            y[j + 1] = float(freq_upper[k])
-            j += 2
+            self.energybins_low  = np.minimum(
+                self.energybins_low,   lowE[j * n_energybins: (j + 1) * n_energybins])
+            
+            self.energybins_high = np.maximum(
+                self.energybins_high, highE[j * n_energybins: (j + 1) * n_energybins])
+        
+        self.n_energybins = n_energybins
+        
+        diffE = self.energybins_high - self.energybins_low
+        
+        # Combine flux from different SSDs.
+        
+        array = self.energytime.values
+        
+        for i in range(self.n_energybins):
+            self.energytime['Channel{:d}_Flux'.format(i)] = array[:, i::self.n_energybins].mean(axis=1)
+            
+        self.energytime.drop(labels=self.metadata['channels'], axis=1, inplace=True)
+        
+        
+        # Create pitch-angle data (flux units)
+        self.pitchangletime = self.df_raw\
+            .loc[:, self.metadata['channels']].copy()
+        
+        pitchanglecols = self.df_raw\
+            .loc[:, [x for x in self.df_raw.columns if 'Pitch_Angle' in x]].copy()
+        
+        for j, pa in enumerate(self.pitchangles):
 
-        c0 = self.df[columns].values.T
-        c = np.zeros((y.shape[0] - 1, x.shape[0] - 1))
-        for i in range(c.shape[0]):
-            for j in range(c.shape[1]):
-                if i % 2 != 0:
-                    c[i, j] = np.NaN
-                else:
-                    c[i, j] = c0[int(i/2), j]
+            self.pitchangletime['Intensity_PA_bin_{:d}'.format(j)] = 0
+            self.pitchangletime['nSSDs_PA_bin_{:d}'.format(j)] = 0
 
-        mp = ax.pcolormesh(x, y, c, cmap=cmap, norm=colors.LogNorm(vmin=vmin, vmax=vmax))
+            for k in range(self.nSSD):
 
+                condition = (pitchanglecols['Pitch_Angle_T{:d}'.format(k)] >= pa) & \
+                            (pitchanglecols['Pitch_Angle_T{:d}'.format(k)] < pa + 10)
+
+#                 self.pitchangletime.loc[condition, 'Intensity_PA_bin_{:d}'.format(j)] += \
+#                     self.pitchangletime.loc[condition, 'SSD{:d} Counts'.format(k)].values
+
+                self.pitchangletime.loc[condition, 'Intensity_PA_bin_{:d}'.format(j)] += \
+                    self.pitchangletime.loc[
+                        condition, 
+                        self.pitchangletime.columns.str.contains('T{:d}'.format(k))].mean(axis=1)
+                    # .apply(lambda x: (x.values).mean(), axis=1)  # *diffE).sum()
+    
+                self.pitchangletime.loc[condition, 'nSSDs_PA_bin_{:d}'.format(j)] += 1
+            
+            self.pitchangletime['Intensity_PA_bin_{:d}'.format(j)] /= \
+                self.pitchangletime['nSSDs_PA_bin_{:d}'.format(j)]
+        
+            
+#         if self.dtbin == 'T':
+#             self.pitchangletime = self.pitchangletime\
+#                 .loc[:, self.pitchangletime.columns.str.contains('Intensity_PA_bin')]\
+#                 .apply(lambda x: x * collect_durations, axis=0)\
+#                 .resample('T', offset='30S')\
+#                 .sum()\
+#                 .apply(lambda x: x / 60, axis=0)
+            
+#         elif self.dtbin == '30S':
+#             self.pitchangletime = self.pitchangletime\
+#                 .loc[:, self.pitchangletime.columns.str.contains('Intensity_PA_bin')]\
+#                 .apply(lambda x: x * collect_durations, axis=0)\
+#                 .resample('30S', offset='15S')\
+#                 .sum()\
+#                 .apply(lambda x: x / 30, axis=0)
+            
+        if self.dtbin == 'T':
+            self.pitchangletime = self.pitchangletime\
+                .loc[:, self.pitchangletime.columns.str.contains('Intensity_PA_bin')]\
+                .resample('T', offset='30S')\
+                .mean()
+
+        elif self.dtbin == '30S':
+            self.pitchangletime = self.pitchangletime\
+                .loc[:, self.pitchangletime.columns.str.contains('Intensity_PA_bin')]\
+                .resample('30S', offset='15S')\
+                .mean()
+
+        
+        for key in self.pitchangletime.keys():
+            if not 'Intensity_PA_bin' in key:
+                self.pitchangletime.drop(label=key, axis=1)
+            
+    
+        
+    def plot_energy_spectra(self, ax, vmin=None, vmax=None, cmap=None):
+        """Energy / time dynamic spectra using pcolormesh."""
+        
+        # Create x data containing start and end
+    
+        if self.dtbin == 'T':
+            timearray = (self.energytime.index - dt.timedelta(seconds=30)).to_pydatetime()
+        elif self.dtbin == '30S':
+            timearray = (self.energytime.index - dt.timedelta(seconds=15)).to_pydatetime() 
+            
+        timearray = np.append(timearray, timearray[-1] + (timearray[1] - timearray[0]))
+
+        # Create y data (pitch-angle or energy bins)
+        bins = []
+        for lbin, hbin in zip(self.energybins_low, self.energybins_high):
+                bins.extend([lbin, hbin])    
+        bins = np.asarray(bins)
+
+        # Create c data. Mask appropriately. 
+
+        c0 = self.energytime.values.T
+        c0 = np.ma.masked_where(((c0 < 0) | (c0 > 1e15)), c0)
+
+        c = np.zeros((len(bins) - 1, len(timearray) - 1))
+        c[:, :] = np.NaN
+        c[::2, :] = c0[:, :]
+
+        mp = ax.pcolormesh(timearray, bins, c, 
+                           norm=colors.LogNorm(vmin=vmin, vmax=vmax), cmap=cmap)
+        
         ax.set_yscale('log')
-        ax.set_ylim([20, y[-1]])
-        ax.set_ylabel('Energy [keV]')
-
-        size = 0.02
-        bbox = ax.get_position()
-        cax = ax.figure.add_axes([bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
-        cbar = ax.figure.colorbar(mp, cax=cax)
-        # cbar.set_label('counts/s/cm$^2$/str/keV', rotation=270, labelpad=10.0)
+        
+        if self.species in ['oxygen', 'sulfur']:
+            ax.set_ylim([100, 2e4])
+            ax.set_yticks([100, 1000, 10000])
+        else:
+            ax.set_ylim([30, 1e3])
+            ax.set_yticks([100, 1000])
+            
         
         ax.set_ylabel('JEDI Flux\n{:s}\n'.format(self.species) + '\nkeV')
+
+        size = 0.02
+        bbox = ax.get_position()
+        cax = ax.figure.add_axes([bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
+        cbar = ax.figure.colorbar(mp, cax=cax)
+        cbar.set_ticks(ticker.LogLocator(numticks=7, subs='all'))
+        
+        # cbar.set_label('counts/s/cm$^2$/str/keV', rotation=270, labelpad=25.0, fontsize=9)
+    
+        
         
         return ax
+    
+    
+    def plot_pitchangle_spectra(self, ax, vmin=None, vmax=None, cmap=None, combine=None):
+        
+        import matplotlib.colors as colors 
+        
+        # Create x data containing start and end
+        
+        if self.dtbin == 'T':
+            timearray = (self.energytime.index - dt.timedelta(seconds=30)).to_pydatetime()
+        elif self.dtbin == '30S':
+            timearray = (self.energytime.index - dt.timedelta(seconds=15)).to_pydatetime() 
+            
+        timearray = np.append(timearray, timearray[-1] + (timearray[1] - timearray[0]))
+
+        # Create y data (pitch-angle or energy bins)  
+        bins = np.append(self.pitchangles, 180)
+
+        # Create c data. Mask appropriately. 
+        
+        if combine:
+            c0 = self.pitchangletime.values.T \
+                 + combine[0].pitchangletime.values.T + combine[1].pitchangletime.values.T
+            
+        c0 = self.pitchangletime.values.T
+        c0 = np.ma.masked_where(((c0 < 0) | (c0 > 1e15)), c0)
+        
+        mp = ax.pcolormesh(timearray, bins, c0, 
+                           norm=colors.LogNorm(vmin=vmin, vmax=vmax), cmap=cmap)
+        
+        ax.set_ylim([0, 180])
+        
+        if combine:
+            ax.set_ylabel('Non-proton\n' + 'PA $^\circ$')
+        else:
+            ax.set_ylabel('{:s}\n'.format(self.species) + 'PA $^\circ$')
+        
+        ax.set_yticks([0, 90, 180])
 
 
-    def plot_low_res_line_plots_unmerged(self, ax, iTele=0):
-        """
-        Plot different lines showing the flux at different energies.
-        """
-        import matplotlib.pyplot as plt
+        size = 0.02
+        bbox = ax.get_position()
+        cax = ax.figure.add_axes([bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
+        
+        cbar = ax.figure.colorbar(mp, cax=cax)
+        # cbar.set_label('counts/s/cm$^2$/str/keV', rotation=270, labelpad=25.0, fontsize=9)
+        # cbar.set_label('intensity', rotation=270, labelpad=20.0)
+        cbar.set_ticks(ticker.LogLocator(numticks=7, subs='all'))
+    
+    
+    def plot_flux_timeseries(self, ax, disable_legend=False):
+        
         from matplotlib import cm
-        from matplotlib.ticker import AutoMinorLocator
         
-        for iTele in range(self.nSSD):
-            columns = [x for x in self.FluxChannels.columns if 'T{:d}'.format(iTele) in x]
-
-            start = 0.0
-            stop = 1.0
-            nlines = len(columns)
-            cm_subsection = np.linspace(start, stop, nlines)
-            colors = [ cm.jet(x) for x in cm_subsection ]
-
-            for i, col in enumerate(columns):
-                ax.plot(self.df.index, self.df[col], '.', lw=0.1, markersize=2.0, color=colors[i])
+        start = 0.1
+        stop = 0.9
+        cm_subsection = np.linspace(start, stop, self.n_energybins)
+        colors = [ cm.turbo(x) for x in cm_subsection ]
+            
+        energytime_masked = np.ma.masked_where(((self.energytime.values <= 0) | 
+                                                (self.energytime.values > 1e15)), self.energytime.values)
         
+        for i in range(self.n_energybins):
+            ax.plot(self.energytime.index, energytime_masked[:, i], # '.',
+                    lw=2.0, color=colors[i], markersize=4.,
+                    label='{:.0f}-{:.0f} keV'.format(self.energybins_low[i], self.energybins_high[i]))
+        
+        if not disable_legend:
+            ax.legend(loc=(1.01, 0.01), fontsize=6, framealpha=1.0, frameon=False)
+            
         ax.set_yscale('log')
-        ax.xaxis.set_minor_locator(AutoMinorLocator())
-        ax.grid('on', which='minor', lw='0.5', ls='dotted')
-        ax.set_xlim([self.df.index[0], self.df.index[-1]])
+        # ax.grid('on', which='minor', lw='0.5', ls='dotted')
+        # ax.set_xlim([self.df.index[0], self.df.index[-1]])
         
-        ax.set_ylabel('JEDI e$^{-}$ Flux\n' + 'Sensor - ' + 
-                      os.path.split(self.filename)[-1][4:7] + '\ncounts/s\n/cm$^2$/str/keV')
-        
-        # ax.set_ylabel('Differential Intensity')
-
-        # legendtext = ['{:s}-{:s} keV'.format(lower, upper) for lower, upper in zip(
-        #     self.FluxChannels.lowE,
-        #     self.FluxChannels.highE)]
-        #
-        # for i, text in enumerate(legendtext):
-        #     ax.text(0, i / len(legendtext))
-        #
-        # ax.legend(, loc='lower left', borderaxespad=0.0, framealpha=1)
-
-        return ax
-    
-        
-    def calc_broadband_flux(self):
-        """
-        Given the JediData dataframe, calculate the integrated flux from all energy channels.
-        Broadband flux is separate for each telescope/SSD.
-        """
-        for i in range(self.nSSD):
-            
-            # Get all channels containing the SSD ID. 
-            channels = self.metadata['channels'].str.contains('T{:d}'.format(i))
-
-            columns = self.metadata['channels'][channels]
-            lowEbins = self.metadata['lowEbins'][channels]
-            highEbins = self.metadata['highEbins'][channels]
-            diffE = (highEbins - lowEbins).to_numpy()
-
-            self.df['BroadbandFlux_T{:d}'.format(i)] = self.df.apply(
-                lambda x: (x[columns].values * diffE).sum(), axis=1)
-            
-            
-    def create_new_energy_bins(self):
-        """Create new energy bins for merged data."""
-        
-        if not self.isMerged:
-            raise Exception('Should only be done for merged data.')
-            
-        chars = ['x', 'y', 'z']
-
-        lowbin_list = []
-        highbin_list = []
-
-        n_bins = int(len(self.metadata['lowEbins_x']) / self.nSSD)
-
-        # Save the first few bins
-        energy_bins_lower  = self.metadata['lowEbins_x'].to_numpy()[:n_bins]
-        energy_bins_higher = self.metadata['highEbins_x'].to_numpy()[:n_bins]
-        
-        # Continuously check for min/max
-        for i in range(self.nfiles):
-            for j in range(1, self.nSSD):
-
-                lowE  = self.metadata['lowEbins_{:s}'.format(chars[i])].to_numpy() 
-                highE = self.metadata['lowEbins_{:s}'.format(chars[i])].to_numpy()
-
-                energy_bins_lower  = np.minimum(energy_bins_lower,   lowE[j * n_bins: (j + 1) * n_bins])
-                energy_bins_higher = np.maximum(energy_bins_higher, highE[j * n_bins: (j + 1) * n_bins])
-
-        return energy_bins_lower, energy_bins_higher
+        ax.set_ylabel('JEDI Flux\n{:s}\n'.format(self.species) + '\nintensity')
+        ax.yaxis.set_major_locator(ticker.LogLocator(base=10, numticks=15))
     
     
-    
-    
-    def plot_pitchangle_scatter(self, ax, size=0.5):
-        """
-        Plot the pitchangle scatter for the current dataset on the ax.
-        """
-        if self.nfiles > 1:
-            chars = ['_x', '_y', '_z']
-        else:
-            chars = ['']
-
-        for j in range(self.nfiles):
-            for i in range(self.nSSD):
-                mp = ax.scatter(
-                    self.df.index, 
-                    self.df['Pitch_Angle_T{:d}{:s}'.format(i, chars[j])],
-                    c=self.df['BroadbandFlux_T{:d}{:s}'.format(i, chars[j])],
-                    s=size,
-                    marker='s',
-                    cmap='jet', 
-                    norm=colors.LogNorm(vmin=10**4, vmax=10**6))
+def merge_two_jedi_data(j1, j2):
+    """
+    Merges two jeDI data files of same type & species. 
+    Returns a JediData object.
+    """
         
-        ax.set_ylim([0, 180])
-        if 'ion' in self.species:
-            ax.set_ylabel('H$^+$\n' + 'PA $^\circ$')
-        else:
-            ax.set_ylabel('{:s}\n'.format(self.species) + 'PA $^\circ$')
-        ax.set_yticks([0, 90, 180])
-
-        size = 0.02
-        bbox = ax.get_position()
-        cax = ax.figure.add_axes([bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
-        cbar = ax.figure.colorbar(mp, cax=cax)
-        # cbar.set_label('counts/s/cm$^2$/str/keV', rotation=270, labelpad=10.0)
+    j3 = JediData()    # Instantiate empty for merge. 
 
     
-    def plot_pitchangle_spectra(self, ax, start=None, end=None, nticks=6, vmin=1e5, vmax=5e6, cmap='coolwarm'):
-        """
-        Plot the pitch angle spectra .
-        
-        We need to use pcolormesh for better control.
-        pcolormesh uses three main inputs:
-            X[i, j] - X[i+1, j], array of N + 1, M + 1 points
-            Y[i, j] - Y[i, j+1], array of N + 1, M + 1 points
-            C[i, j], array of N, M points
-            
-        We can contruct X and Y on our own using the timedeltas and specific pitch angles.
-        
-        For C , we need to know the number of measurements within a given time period and pitch angle interval.  
-        
-        """
-        if self.nfiles > 1:
-            chars = ['_x', '_y', '_z']
-        else:
-            chars = ['']
-    
-        if start and end:
-            n_times = int((end - start).total_seconds() / 60) 
-            time_array = pd.date_range(
-                start=start, end=end, periods=n_times + 1).to_pydatetime().tolist()
-        else:
-            n_times = int((self.df.index[-1] - self.df.index[0]).total_seconds() / 60) 
-            time_array = pd.date_range(
-                start=self.df.index[0], end=self.df.index[-1], periods=n_times + 1).to_pydatetime().tolist()    # Time array returns list
-        
-        n_angles = 18
-        pitch_angle_array = np.linspace(0, 180, n_angles + 1)
-        
-        X, Y = np.meshgrid(time_array, pitch_angle_array)   # The size for the meshgrid is (N + 1) x (M + 1)
-        
-        C = np.zeros((n_angles, n_times))                                 # There is a weird transpose that happens after meshgrid. 
-        
-        """
-        Now we need to construct C. For this we need to loop over each time bin, and each pitch angle bin.
-        We need to collect all data points from all files and SSDs which lie inside this 2D bin. 
-        We will collect the number of data points (npoints) within the bin and the Broadband Flux (broadbandflux).
-        """
-        times_all = np.array([], dtype=object)
-        pa_all = np.array([])
-        flux_all = np.array([])
-
-        for j in range(self.nfiles):
-            for iax in range(self.nSSD):
-                times_all = np.concatenate((times_all, self.df.index.values))
-                pa_all = np.concatenate((pa_all, self.df['Pitch_Angle_T{:d}{:s}'.format(iax, chars[j])].to_numpy()))
-                flux_all = np.concatenate((flux_all, self.df['BroadbandFlux_T{:d}{:s}'.format(iax, chars[j])].to_numpy()))
-        
-        
-        times = np.zeros(len(times_all), dtype=object)                     # Quick fix for numpy / datetime incompatibilities.
-        for i in range(len(times_all)):
-            times[i] = dt.datetime.utcfromtimestamp(times_all[i] / 1e9)
-            
-            
-        npoints_array = np.zeros((n_angles, n_times))
-        bbandflux_array = np.zeros((n_angles, n_times))
-        
-        for i in range(n_times):
-            
-            pa_filter = pa_all[(times > time_array[i]) & (times <= time_array[i + 1])]
-            flux_filter = flux_all[(times > time_array[i]) & (times <= time_array[i + 1])]
-            
-            for j in range(n_angles):
-                
-                flux = flux_filter[(pa_filter > pitch_angle_array[j]) & (pa_filter <= pitch_angle_array[j + 1])] 
-                
-                npoints_array[j, i] = len(flux)
-                bbandflux_array[j, i] = np.sum(flux)
-                
-        
-        npoints_array /= np.sum(npoints_array)
-        
-        C = bbandflux_array * 1.0 # / npoints_array
-        
-        mp = ax.pcolormesh(X, Y, C, cmap=cmap, norm=colors.LogNorm(vmin=vmin, vmax=vmax))
-
-         # c = pd.to_datetime(x_pa, unit='ns')
-            
-        ax.set_ylim([0, 180])
-        if 'ion' in self.species:
-            ax.set_ylabel('H$^+$\n' + 'PA $^\circ$')
-        else:
-            ax.set_ylabel('{:s}\n'.format(self.species) + 'PA $^\circ$')
-        ax.set_yticks([0, 90, 180])
-
-
-        size = 0.02
-        bbox = ax.get_position()
-        cax = ax.figure.add_axes([bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
-        cbar = ax.figure.colorbar(mp, cax=cax)
-
-    
-        
-def merge_data_species(data, species):
-    """Given various JediData objects for the same species, merge them."""
-
-    data_merge = JediData()
-    
-    if len(data) == 1:
-        data_merge.df = data[0].df
-        data_merge.metadata = data[0].metadata
+    if not (j1.n_energybins == j2.n_energybins): 
+        raise Exception('Unequal Energy bins.')
     else:
-        data_merge.df = pd.merge_ordered(data[0].df, data[1].df, on='time')
-        data_merge.metadata = pd.merge_ordered(data[0].metadata, data[1].metadata, on='channels')
+        j3.n_energybins = j1.n_energybins
+        
+#     if not (j1.energytime.index.equals(j2.energytime.index)):
+#         raise Exception('Unequal time tags.')
+        
+    if not (j1.species == j2.species):
+        raise Exception('Merging files of different species.')
+    else:
+        j3.species = j1.species
+        
+    j3.dtbin = j1.dtbin
 
-        # Merge fluxes from same energy channels. 
-        for channel in data_merge.metadata['channels']:
-            data_merge.df[channel] = data_merge.df[channel + '_x'] + data_merge.df[channel + '_y']
-        
-    # Set time as index
-    data_merge.df.set_index(['time'], inplace=True)
-    data_merge.df['Duration'] = np.maximum(data_merge.df['Duration_x'], data_merge.df['Duration_y'])
+    j3.pitchangles = j1.pitchangles.copy()
     
-    # Modify in case we have three files
-    if len(data) == 3:
-        data_merge.df = pd.merge_ordered(data_merge.df, data[2].df, on='time', suffixes=(None, "_z"))
-        data_merge.metadata = pd.merge_ordered(data_merge.metadata, data[2].metadata, on='channels', suffixes=(None, "_z"))
+    df_concat = pd.concat([j1.energytime, j2.energytime])
+    j3.energytime = df_concat.groupby(df_concat.index).mean()
+    
+    df_concat = pd.concat([j1.pitchangletime, j2.pitchangletime])
+    j3.pitchangletime = df_concat.groupby(df_concat.index).mean()
         
-        # Merge fluxes from same energy channels. 
-        for channel in data_merge.metadata['channels']:
-            data_merge.df[channel] = data_merge.df[channel] + data_merge.df[channel +  '_z']
+    j3.energybins_low = np.minimum(j1.energybins_low, j2.energybins_low)
+    j3.energybins_high = np.maximum(j1.energybins_high, j2.energybins_high)
+    
+    return j3
 
-        data_merge.df['Duration'] = np.maximum(data_merge.df['Duration'], data_merge.df['Duration_z'])
         
-    # Remove NaNs
-    data_merge.df = data_merge.df.dropna()
+
+def get_jedi_data(start, end, dtbin='T'):
     
-    data_merge.isMerged = True
-    data_merge.nfiles = len(data)
-    data_merge.species = species
+    electron_data = check_or_fetch('ERSESP', start, end, 'ELECTRON', dtbin=dtbin)
     
-    return data_merge
+    proton_data = check_or_fetch('ERSTOFXER', start, end, 'PROTON', dtbin=dtbin)
+    
+    nonproton_data = []
+    nonproton_data.append(check_or_fetch('NONPTOFXER', start, end, 'O\+S', dtbin=dtbin))
+    nonproton_data.append(check_or_fetch('NONPTOFXER', start, end, 'OXYGEN', dtbin=dtbin))
+    nonproton_data.append(check_or_fetch('NONPTOFXER', start, end, 'SULFUR', dtbin=dtbin))
+    
+    return electron_data, proton_data, nonproton_data
+        
+
+def check_or_fetch(sid, start, end, species, dtbin='T'):
+    
+    import glob
+    
+    from JunoPy.index import IndexFile
+
+    jediindex = IndexFile(dataset='jedi')
+    
+    files = glob.glob('data/jedi/*{:s}_CDR_{:s}_*.TAB'.format(sid, start.strftime('%Y%j')))
+    
+    if not files:
+        
+        jediindex.get_files_between_dates(start, end, DoDownload=True, sid=sid)
+        
+        files = glob.glob('data/jedi/*{:s}_CDR_{:s}_*.TAB'.format(sid, start.strftime('%Y%j')))
+    
+    
+    if len(files) == 0:
+        return None
+    else:
+        print(files)
+        
+    merged = JediData(filename=files[0], start=start, end=end, species=species, dtbin=dtbin)
+    
+    if len(files) == 1:
+        return merged
+    
+    
+    for i in range(1, len(files)):
+        
+        merged = merge_two_jedi_data(
+            merged, JediData(filename=files[i], start=start, end=end, species=species, dtbin=dtbin)) 
+        
+    return merged

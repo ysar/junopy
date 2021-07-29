@@ -123,7 +123,7 @@ class WavesData(object):
 
 class WavesDataDas(object):
     
-    DAS_SERVER = 'site:/uiowa/juno/wav/survey/'
+    DAS_SERVER = 'site:/uiowa/Juno/WAV/Survey/'
     
     def __init__(self, start, end):
         """Given a start and end time in datetime, fetch data from Iowa DAS server"""

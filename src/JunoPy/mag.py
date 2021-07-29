@@ -368,8 +368,6 @@ class ForceFreeFluxRope(object):
         B_fit = np.asarray([Bx_fit, By_fit, Bz_fit]).T
         B1_fit = np.dot(B_fit, np.asarray([magdata_mva.x1, magdata_mva.x2, magdata_mva.x3]).T)
         
-        print(B1_fit.shape)
-        
         self.magdata = magdata
         self.magdata_mva = magdata_mva
         self.magdata_mva.df['Bfit_x'] = B1_fit[:, 0]
@@ -648,3 +646,19 @@ class AutoFluxRope(object):
             endtimes.append(p[1])
             
         return starttimes, endtimes
+    
+
+def merge_magdata(m1, m2):
+    """Merge two magdata files. Usually used for concatenation."""
+    
+    m3 = MagData()
+    
+    m3.columns = m1.columns
+    m3.df = pd.concat([m1.df, m2.df])
+    
+    m3.filename = os.path.join(
+        os.path.split(m1.filename)[0],
+        os.path.split(m1.filename)[-1][:-4] + '_' + os.path.split(m2.filename)[-1])
+    
+    
+    return m3

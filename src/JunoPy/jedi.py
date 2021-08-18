@@ -3,10 +3,12 @@ import os
 import numpy as np
 import pandas as pd
 import datetime as dt
-
+import glob
 
 from matplotlib import ticker
 import matplotlib.colors as colors
+
+from JunoPy.index import IndexFile
 
 
 class JediData:
@@ -102,9 +104,16 @@ class JediData:
             df = df[df['particletype'].str.contains(self.species)]
             
         if self.species == 'O\+S':
-            self.species = 'O+S'
+            self.species = 'O & S'
+        elif self.species == 'OXYGEN':
+            self.species = 'O+/S++'
+        elif self.species == 'SULFUR':
+            self.species = 'S+'
+        elif self.species == 'PROTON':
+            self.species = 'H+'
         else:
-            self.species = self.species.lower()
+            self.species = 'e-'
+
             
         self.metadata = df
         
@@ -282,7 +291,7 @@ class JediData:
             ax.set_yticks([100, 1000])
             
         
-        ax.set_ylabel('JEDI Flux\n{:s}\n'.format(self.species) + '\nkeV')
+        ax.set_ylabel('{:s}\nEnergy'.format(self.species) + '\nkeV')
 
         size = 0.02
         bbox = ax.get_position()
@@ -330,7 +339,7 @@ class JediData:
         if combine:
             ax.set_ylabel('Non-proton\n' + 'PA $^\circ$')
         else:
-            ax.set_ylabel('{:s}\n'.format(self.species) + 'PA $^\circ$')
+            ax.set_ylabel('{:s}\n'.format(self.species) + 'PAD $^\circ$')
         
         ax.set_yticks([0, 90, 180])
 
@@ -369,7 +378,7 @@ class JediData:
         # ax.grid('on', which='minor', lw='0.5', ls='dotted')
         # ax.set_xlim([self.df.index[0], self.df.index[-1]])
         
-        ax.set_ylabel('JEDI Flux\n{:s}\n'.format(self.species) + '\nintensity')
+        ax.set_ylabel('{:s}\nDiff.\nIntensity'.format(self.species))
         ax.yaxis.set_major_locator(ticker.LogLocator(base=10, numticks=15))
     
     
@@ -428,9 +437,7 @@ def get_jedi_data(start, end, dtbin='T'):
 
 def check_or_fetch(sid, start, end, species, dtbin='T'):
     
-    import glob
     
-    from JunoPy.index import IndexFile
 
     jediindex = IndexFile(dataset='jedi')
     

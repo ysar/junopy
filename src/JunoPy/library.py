@@ -13,7 +13,7 @@ PDS_URL = 'https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/'
 DATASETS = {
     'mag': 'JNO-J-3-FGM-CAL-V1.0',
     'waves-burst': 'JNO-E_J_SS-WAV-3-CDR-BSTFULL-V1.0',
-    'waves-survey': 'JNO-E_J_SS-WAV-3-CDR-SRVFULL-V1.0',
+    'waves-survey': 'JNO-E_J_SS-WAV-3-CDR-SRVFULL-V2.0',
     'jedi': 'JNO-J-JED-3-CDR-V1.0',
     'jade': 'JNO-J_SW-JAD-3-CALIBRATED-V1.0'
 }

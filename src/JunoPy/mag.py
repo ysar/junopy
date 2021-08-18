@@ -24,7 +24,7 @@ class MagData(object):
         "Bx", "By", "Bz", "Brange", "X", "Y", "Z"
     ]
 
-    def __init__(self, filename=None, ishdf=True):
+    def __init__(self, filename=None, ishdf=True, start=None, end=None):
         """
         Class to parse magnetometer data files. Stores data into a pandas
         dataframe.
@@ -36,7 +36,10 @@ class MagData(object):
             else:
                 self.filename = filename
                 self.parse_mag_file()
-
+        
+        if start and end:
+            self.df = self.df.loc[start - dt.timedelta(minutes=5): end + dt.timedelta(minutes=5)].copy()
+            
     def __repr__(self):
         """String representation for class. Writes the dataframe head"""
         return self.df.head().__repr__()
@@ -158,13 +161,13 @@ class MagData(object):
             
             # ax.xaxis.set_minor_locator(AutoMinorLocator())
             ax.grid('on', which='minor', lw='0.5', ls='dotted')
-
-            xmin, xmax, ymin, ymax = ax.axis()
-            if ymin < 0 < ymax:
-                ax.axhline(y=0, color='k', ls='dashed', lw=1)
                 
             if Bfit:
                 ax.plot(self.df.index, self.df['Bfit_' + chr(i + 120)], color='b', lw=0.7)
+                
+            xmin, xmax, ymin, ymax = ax.axis()
+            if ymin < 0 < ymax:
+                ax.axhline(y=0, color='k', ls='dashed', lw=1)
             
             if 'Btheta' in vars:
                 ax.set_ylabel(var_string[vars[i]] + ' (nT)')
@@ -192,14 +195,14 @@ class MagData(object):
             
             ax.xaxis.set_minor_locator(AutoMinorLocator())
             ax.grid('on', which='minor', lw='0.5', ls='dotted')
-
+                
+            if Bfit is not None:
+                ax.plot(self.df.index, Bfit[i], color='b', lw=0.7)
+            
             xmin, xmax, ymin, ymax = ax.axis()
             if ymin < 0 < ymax:
                 ax.axhline(y=0, color='k', ls='dashed', lw=1)
                 
-            if Bfit is not None:
-                ax.plot(self.df.index, Bfit[i], color='b', lw=0.7)
-
             ax.set_ylabel(vars[i] + ' (nT)')
             ax.set_xlim([self.df.index[0], self.df.index[-1]])
 
@@ -322,7 +325,7 @@ class MagData(object):
 # ==================================================================
 class ForceFreeFluxRope(object):
     
-    def __init__(self, magfile, start, end):
+    def __init__(self, magfile, start, end, dofit=True):
         """Main function for force free fit."""
         
         magdata = MagData(filename=magfile)
@@ -334,7 +337,12 @@ class ForceFreeFluxRope(object):
         magdata_mva = MagData(filename=magfile)
         magdata_mva.df = magdata_mva.df.loc[start:end]
         magdata_mva.perform_mva()
-
+        
+        if not dofit:
+            self.magdata = magdata
+            self.magdata_mva = magdata_mva
+            return None
+        
         magdata_mva.df['Bmag_saved'] = magdata_mva.df['Bmag']
         magdata_mva.df['Bx'] /= magdata_mva.df['Bmag']
         magdata_mva.df['By'] /= magdata_mva.df['Bmag']
@@ -651,14 +659,13 @@ class AutoFluxRope(object):
 def merge_magdata(m1, m2):
     """Merge two magdata files. Usually used for concatenation."""
     
-    m3 = MagData()
+    m3 = copy.copy(m1)
     
-    m3.columns = m1.columns
     m3.df = pd.concat([m1.df, m2.df])
     
-    m3.filename = os.path.join(
-        os.path.split(m1.filename)[0],
-        os.path.split(m1.filename)[-1][:-4] + '_' + os.path.split(m2.filename)[-1])
+#     m3.filename = os.path.join(
+#         os.path.split(m1.filename)[0],
+#         os.path.split(m1.filename)[-1][:-4] + '_' + os.path.split(m2.filename)[-1])
     
     
     return m3

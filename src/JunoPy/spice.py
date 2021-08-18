@@ -123,7 +123,7 @@ def get_juno_position(times, coordsystem='JUNO_JSS'):
             spice.str2et(dt.datetime.strftime(time, '%Y-%m-%dT%H:%M:%S.%f')))
 
     position, lightTimes = spice.spkpos(
-        'Juno', times_converted, coordsystem, 'NONE', 2)
+        'Juno', times_converted, coordsystem, 'NONE', 'JUPITER BARYCENTER')
 
     spice.kclear()
     position = np.asarray(position) / 71492

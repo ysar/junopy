@@ -1,6 +1,19 @@
-#
-#   Contains constants, URLs etc.
-#
+"""
+Library
+-------
+Contains constants and hard-links, also contains some general functions.
+
+Constants:
+:param int R_JUPITER: Radius of Jupiter in km
+:param dict DATASETS: 
+    Dictionary containing technical names of the datasets.
+    Keys - mag, waves-burst, waves-survey, jedi, jade 
+:param dict EXTENSIONS: 
+    Dictionary containing file extensions for each dataset.
+:param dict TIMEFORMAT:
+    Dictionary containing time formats for different instruments.
+    
+"""
 import os
 import numpy as np
 import datetime as dt
@@ -38,6 +51,10 @@ TIMEFORMAT = {
 def convert_pos_spherical(pos):
     """
     Given coordinates (x,y,z) in pos[0], pos[1], pos[2], return R, LT, Latitude
+    
+    :param list pos: 3-value list containing spacecraft position in cartesian 
+                     coordinates
+    ::
     """
     R = np.sqrt(pos[0]**2 + pos[1]**2 + pos[2]**2)
     LT = 6 / 90 * np.arctan2(pos[1], pos[0]) * 180 / np.pi + 12

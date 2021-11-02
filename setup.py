@@ -22,18 +22,5 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.6',
-    install_requires=[
-        'numpy>=1.18',
-        'matplotlib>=3.1.2',
-        'pytest>=5.3.2',
-        'wget>=3.2',
-        'pandas>=0.25.3',
-        'ipython>=7.11.0',
-        'spiceypy>=2.3.2',
-        'jupyterlab>=1.2.4',
-        'h5py>=2.10.0',
-        'tables>=3.6.1',
-        'ipykernel>=5.3.0',
-    ]
+    python_requires='>=3.6'
 )

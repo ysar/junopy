@@ -321,6 +321,20 @@ class MagData(object):
                      * (np.sqrt(self.eigval[1]) - np.sqrt(self.eigval[0]))
                      / np.sqrt(self.eigval[2]**3))
 
+def merge_magdata(m1, m2):
+    """Merge two magdata files. Usually used for concatenation."""
+    
+    m3 = copy.copy(m1)
+    
+    m3.df = pd.concat([m1.df, m2.df])
+    
+#     m3.filename = os.path.join(
+#         os.path.split(m1.filename)[0],
+#         os.path.split(m1.filename)[-1][:-4] + '_' + os.path.split(m2.filename)[-1])
+    
+    
+    return m3
+
 
 # ==================================================================
 class ForceFreeFluxRope(object):
@@ -655,17 +669,194 @@ class AutoFluxRope(object):
             
         return starttimes, endtimes
     
+    
+    
+# =============================================================================
+class AutoPlasmoid(object):
+    """
+    This is a namespace class containing the logic to identify plasmoids in the 
+    magnetotail based on their magnetic signatures. 
+    """
+    def __init__(self):
+        raise Exception("Namespace class shouldn't be instantiated.")
+        
+    
+    @staticmethod
+    def find_btheta_crossings(magdata, start=None, end=None):
+        """
+        Give a magnetometer dataset, find all locations where Btheta changes 
+        sign. At this point we don't care about whether the crossing is from 
+        North-to-south or vice-versa as there can be large changes superimposed 
+        onto the smaller ones. 
+        """
+        if start and end:
+            df = magdata.df.loc[start:end].copy()
+        else:
+            df = magdata.df.copy()
 
-def merge_magdata(m1, m2):
-    """Merge two magdata files. Usually used for concatenation."""
+        df['sign_btheta'] = np.sign(df['Btheta'].values)
+
+        return df[np.abs(df['sign_btheta'].diff()) > 0].index 
+                 
+                 
+    @staticmethod
+    def find_plasmoid_start_end(magdata, crossing1, crossing2, window=5, n=10):
+        """
+        This is done is multiple steps
+        
+        For each indentified Btheta crossing, find the nearest maxima or minima. How?
+        1. Cut away +/- 5 min from the Btheta crossings. 
+        2. Identify all points where d(Btheta)/dt = 0 (or where it changes sign.)
+        3. Store maxima and minima points separately. 
+        
+        Compare each set of maxima and minima for a particular crossing and choose the best fit.
+        1. Create max, min pairs.
+        2. Create a model dataset by interpolating the Btheta values between the two points.
+        3. Calculate LS error for the model and data for each max, min pair.
+        4. Select the pair with the least LS error. 
+        
+        Returns the best start, end times for the Btheta crossing event.
+        """
+        # To save time and get the best data. We concentrate on certain radial ranges and local times
+        if magdata.df.loc[crossing1, 'R'] > 90 * R_JUPITER or magdata.df.loc[crossing1, 'LT'] > 5:
+            return None
+        
+        # FILTER 1: Select based on window size < 10 min.
+        df = magdata.df.loc[crossing1 - dt.timedelta(minutes=window): 
+                            crossing2 + dt.timedelta(minutes=window)].copy()
+        
+        
+        # Find all extrema.
+        maxima = df.iloc[argrelextrema(df['Btheta'].values, np.greater_equal, order=n)[0]]
+        maxima = maxima[maxima['Btheta'] > 0].index
+        maxima = list(set(maxima))
+        minima = df.iloc[argrelextrema(df['Btheta'].values, np.less_equal, order=n)[0]]
+        minima = minima[minima['Btheta'] < 0].index
+        minima = list(set(minima))
+         
+        pairs = itertools.product(maxima, minima)
+        
+        # Obtain the start, stop pair which gives the minimum least-square error when
+        # the data is approximated as a straight line for both reversals.
+        
+        
+        max_rsqr = 0
+        rsqr = 100
+        
+        # Local method to calculate coefficient of determination
+        def calc_rsqr(t1, t2):
+            df = magdata.df.loc[t1:t2, ['Btheta']].copy()
+            
+            df['Btheta_model'] = np.NaN
+            df.loc[t1,'Btheta_model'] = df.loc[t1, 'Btheta'] 
+            df.loc[t2, 'Btheta_model'] = df.loc[t2,  'Btheta']
+            df['Btheta_model'] = df['Btheta_model'].interpolate() 
+            
+            avg_btheta = df['Btheta'].mean()
+            df['ls_square_model'] = (df['Btheta'] - df['Btheta_model'])**2
+            df['ls_square_mean'] = (df['Btheta'] - avg_btheta)**2
+            
+            return (1 - (df['ls_square_model'].sum() / df['ls_square_mean'].sum()))
+        
+        # Find best-fit linear function for both reversals.
+        
+        tpos1 = None
+        tneg = None
+        tpos2 = None
+        
+        for pos1 in maxima:
+            for neg in minima:
+                for pos2 in maxima:
+                    
+                    if not ((pos1 < crossing1 < neg) and \
+                            (neg < crossing2 < pos2)):
+                        continue
+                    
+                    rsqr1 = calc_rsqr(pos1, neg)
+                    rsqr2 = calc_rsqr(neg, pos2)
+                    
+                    if not ((0 <= rsqr1 < 1) and (0 <= rsqr2 < 1)):
+                        continue
+                        
+                    rsqr = 0.5 * (rsqr1 + rsqr2)
+                    
+                    # Check for minima.    
+                    if rsqr > max_rsqr:
+                        
+                        tpos1 = pos1
+                        tneg = neg
+                        tpos2 = pos2
+                        max_rsqr = rsqr
+        
+        ## verification        
+        
+        # 1. Check size of event.
+        if (tpos2 - tpos1).total_seconds() / 60 > window:
+            print('Event too large')
+            return None, None, None
+        
+        # 2. Ignore weak events. 
+        dbtheta1 = np.abs(df.loc[tpos1, 'Btheta'] - df.loc[neg, 'Btheta'])
+        dbtheta2 = np.abs(df.loc[tpos2, 'Btheta'] - df.loc[neg, 'Btheta'])
+        
+        btheta_std = magdata.df.loc[
+            tpos1 - dt.timedelta(minutes=5*window): 
+            tpos2 + dt.timedelta(minutes=5*window), 'Btheta'].std()
+        
+        if (dbtheta1 < 2 or dbtheta2 < 2 or \
+            (dbtheta2 < btheta_std and dbtheta2 < btheta_std)):
+            print('Event too weak')
+            return None, None, None
+        
+        # 3. Ignore events with Br > 2 nT (lobes)
+        if magdata.df.loc[tpos1:tpos2, 'Br'].mean() > 2 or \
+           magdata.df.loc[tpos1:tpos2, 'Br'].median() > 2:
+            print('Event in the lobes')
+            return None, None, None
+        
+        # 3. Verify using MVA 
+ 
+        magdata_mva = copy.copy(magdata)
     
-    m3 = copy.copy(m1)
+        def test_mva(t1, t2):
+            
+            mva = copy.copy(magdata)
+            mva.df = mva.df.loc[t1:t2].copy()
+            
+            mva.perform_mva()
+            
+            if (np.abs(mva.x3[2] < 0.8)) or (mva.P < 4.5) or \
+                (np.abs(mva.eigval[2] / mva.eigval[1]) < 3) or \
+                (np.abs(mva.eigval[1] / mva.eigval[0]) < 3) or \
+                (mva.df['B1'].abs().mean() > 2) or \
+                (mva.df['B1'].abs().median() > 2):
+                
+                return False
+            
+            return True
+        
+        if not(test_mva(tpos1, tneg) or test_mva(tneg, tpos2)):
+            print('MVA test failed.')
+            
+            return None, None, None
+        
+        return tpos1, tneg, tpos2
     
-    m3.df = pd.concat([m1.df, m2.df])
     
-#     m3.filename = os.path.join(
-#         os.path.split(m1.filename)[0],
-#         os.path.split(m1.filename)[-1][:-4] + '_' + os.path.split(m2.filename)[-1])
-    
-    
-    return m3
+    @staticmethod
+    def find_plasmoid_candidates(magdata, crossings, **kwargs):
+        """Given a list of crossings, find all plasmoid candidates. Typically used in scripts."""
+        
+        times_pos1 = []
+        times_neg = []
+        times_pos2 = []
+        
+        for c1 in crossings[:-1]:
+            for c2 in crossings[1:]:
+                times = AutoFluxRope.find_plasmoid_start_end(magdata, crossing, **kwargs)
+                if times:
+                    times_pos1.append(times[0])
+                    times_neg.append(times[1])
+                    times_pos2.append(times[2])
+            
+        return times_pos1, times_neg, times_pos2

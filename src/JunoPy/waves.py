@@ -2,6 +2,7 @@
 import numpy as np
 import copy
 import pandas as pd
+import scipy
 import datetime as dt
 import glob
     
@@ -12,7 +13,7 @@ from JunoPy.index import IndexFile
 
 class WavesData(object):
 
-    def __init__(self, start=None, end=None, filename=None):
+    def __init__(self, start=None, end=None, filename=None, findcutoff=False):
         """
         Class to parse data from the Waves instrument.
         """
@@ -23,6 +24,9 @@ class WavesData(object):
         if start and end:
             self.df = self.df.loc[start.strftime('%Y-%m-%d %H:%M:%S'):
                                   end.strftime('%Y-%m-%d %H:%M:%S')].copy()
+            
+        if findcutoff:
+            self.find_cutoff()
 
 
     def parse_waves_file(self):
@@ -87,10 +91,29 @@ class WavesData(object):
             inplace=True,
             columns=['SCET', 'SCLK (sec)']
             )
+        
+        
+    @staticmethod
+    def calc_cutoff(x, freq):
+            
+        intensity = x.values
+        
+        maxima = scipy.signal.argrelextrema(intensity, np.greater, order=4)[0]
+        minima = scipy.signal.argrelextrema(intensity, np.less, order=4)[0]
+        maxima = maxima[freq[maxima] > 500][0]
+        minima = minima[freq[minima] > 500][0]
+    
+        return 0.5 * (freq[maxima] + freq[minima])
+        
+        
+    def find_cutoff(self):
+        """Find the low-frequency cutoff for the continuum radiation"""
+        self.df['cutoff'] = self.df[self.channels['names']].apply(lambda x: WavesData.calc_cutoff(x, self.channels['freq'].values), axis=1)
+        
 
     def plot(self, ax=None, magdata=None, extendmag=False,
              flow=50, fhigh=20e3, vmin=None, vmax=None, 
-             logscale=True, cbarlabel=None, **kwargs):
+             logscale=True, cbarlabel=None, showcutoff=False, **kwargs):
         """
         Plot Waves-Survey Spectra  (Freq vs time).
         """
@@ -125,6 +148,9 @@ class WavesData(object):
         mp = ax.pcolormesh(timearray, ybins, c,
                            norm=colors.LogNorm(vmin=vmin, vmax=vmax), **kwargs) # , vmin=1e-15, vmax=1e-12)
         # 14, 10
+        
+        if showcutoff:
+            ax.plot(self.df.index, self.df['cutoff'].values, '.', markersize=1., color='m', lw=0.5)
 
         if magdata:
             ax = magdata.plot_electron_cyc_freq(ax)
@@ -217,12 +243,14 @@ def get_waves_data(start, end):
     
     wavesfiles = glob.glob('data/waves-survey/*{:s}*.CSV'.format(start.strftime('%Y%j')))
 
-    if len(wavesfiles) == 0:
+    if len(wavesfiles) != 2:
         wavesindex = IndexFile(dataset='waves-survey')
         _ = wavesindex.get_files_between_dates(start, end, DoDownload=True, sid='SURVEY')
 
         wavesfiles = glob.glob('data/waves-survey/*{:s}*.CSV'.format(start.strftime('%Y%j')))
-
+    
+        assert(len(wavesfiles) == 2)
+        
     for wfile in wavesfiles:
         print('Reading Waves file - {:s}'.format(wfile))
         if '_E_' in wfile:

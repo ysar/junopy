@@ -1,3 +1,6 @@
+"""
+Contains methods to download files using :mod:`wget`.
+"""
 
 import os
 import wget
@@ -6,9 +9,11 @@ import time
 
 def download_file(url, outfolder=''):
     """
-    Download a file given its url. Replaces any file with the same name in the
+    Downloads a file given its url. Replaces any file with the same name in the
     output directory.
-
+    
+    :param str url: The URL for the file to be downloaded.
+    :param str outfolder: Output directory. Default is current directory.
     """
     if outfolder and not os.path.exists(outfolder):
         os.makedirs(outfolder)
@@ -22,7 +27,11 @@ def download_file(url, outfolder=''):
 
 def download_multiple_files(urls, outfolder=''):
     """
-    Use multiprocessing to download multiple files at a time.
+    Use :mod:`multiprocessing` to download multiple files at a time.
+    
+    :param urls: List of URLs of the files to be downloaded.
+    :type urls: list(str)
+    :param str outfolder: Output directory. Default is current directory.
     """
     from multiprocessing import Pool
 

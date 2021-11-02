@@ -12,14 +12,24 @@ from JunoPy.index import IndexFile
 
 
 class JediData:
+    """
+    Class to read and do things with a single JEDI data file.
     
+    :param str filename: Path to file to be read.
+    :param datetime.datetime start: Starting time to slice data.
+    :param datetime.datetime end: Ending time to slice data.
+    :param str species: Plasma species (Options - 'O\+S', 'OXYGEN', 'SULFUR',
+                        'ELECTRON')
+    :param str dtbin: String describing the binning frequency (datetime code).
+    :param list(float) efilter: List giving upper and lower ends of electron
+                                energy spectra.
+    """
     nSSD = 6
     pitchangles = np.linspace(0, 170, 18)
     
-    def __init__(self, filename=None, start=None, end=None, species=None, dtbin='T'):
-        """
-        Class to read and do things with a SINGLE JEDI data file.
-        """
+    def __init__(self, filename=None, start=None, end=None, 
+                 species=None, dtbin='T', efilter=None):
+        
         
         if not filename:   # Useful for creating empty JediData object.
             return None
@@ -29,6 +39,8 @@ class JediData:
         self.species = species
         
         self.dtbin = dtbin
+        
+        self.efilter = efilter
         
         self.read_csv_file()
         
@@ -42,8 +54,13 @@ class JediData:
             
     
     def read_csv_file(self, dtype='FLUX'):
+        """
+        Internal function to read the JEDI CSV file.
         
-         with open(self.filename, 'r') as f:
+        :param str dtype: Type of JEDI file to be read 
+                          (Options='FLUX'(Default), 'COUNTS', 'CPS')
+        """
+        with open(self.filename, 'r') as f:
         
             channel_names = \
                 [x.strip() for x in f.readline().split(',')]
@@ -54,19 +71,23 @@ class JediData:
             f.readline()
             
             self.create_jedi_metadata(
-                channel_names, ebin_lows, ebin_highs, particle_type, dtype=dtype)
+                channel_names, ebin_lows, ebin_highs, 
+                particle_type, dtype=dtype)
             
-            self.df_raw = pd.read_csv(self.filename, names=channel_names, skiprows=5)
+            self.df_raw = pd.read_csv(self.filename, 
+                                      names=channel_names, skiprows=5)
             
             self.df_raw['time'] = self.df_raw.apply(
-                lambda x: dt.datetime.strptime(x['UTC'], '%Y-%m-%dT%H:%M:%S'), axis=1)
+                lambda x: dt.datetime.strptime(
+                    x['UTC'], '%Y-%m-%dT%H:%M:%S'), axis=1)
         
-            self.df_raw.drop('UTC', 1, inplace=True)
+            self.df_raw.drop(labels='UTC', axis=1, inplace=True)
             self.df_raw.set_index(['time'], inplace=True)
             self.df_raw.sort_index(inplace=True)
             
             
-    def create_jedi_metadata(self, columns, lowE, highE, particletype, dtype='FLUX'):
+    def create_jedi_metadata(self, columns, lowE, highE, 
+                             particletype, dtype='FLUX'):
         """Return metadata for the datafile."""
         
         df = pd.DataFrame()
@@ -100,15 +121,19 @@ class JediData:
             filter_string = df['channels'][0][-7:]    # Filter lowest E channel for H+.
             df = df[~df['channels'].str.contains(filter_string)]
             
+            
+        if self.efilter:
+            df = df[(df['lowEbins'] >= self.efilter[0]) & (df['highEbins'] <= self.efilter[1])]
+            
         if self.species in ['O\+S', 'OXYGEN', 'SULFUR']:
             df = df[df['particletype'].str.contains(self.species)]
             
         if self.species == 'O\+S':
             self.species = 'O & S'
         elif self.species == 'OXYGEN':
-            self.species = 'O+/S++'
+            self.species = 'O'
         elif self.species == 'SULFUR':
-            self.species = 'S+'
+            self.species = 'S'
         elif self.species == 'PROTON':
             self.species = 'H+'
         else:
@@ -247,7 +272,7 @@ class JediData:
         
         for key in self.pitchangletime.keys():
             if not 'Intensity_PA_bin' in key:
-                self.pitchangletime.drop(label=key, axis=1)
+                self.pitchangletime.drop(labels=key, axis=1)
             
     
         
@@ -283,7 +308,7 @@ class JediData:
         
         ax.set_yscale('log')
         
-        if self.species in ['oxygen', 'sulfur']:
+        if self.species in ['O', 'S', 'O & S']:
             ax.set_ylim([100, 2e4])
             ax.set_yticks([100, 1000, 10000])
         else:
@@ -435,7 +460,7 @@ def get_jedi_data(start, end, dtbin='T'):
     return electron_data, proton_data, nonproton_data
         
 
-def check_or_fetch(sid, start, end, species, dtbin='T'):
+def check_or_fetch(sid, start, end, species, dtbin='T', efilter=None):
     
     
 
@@ -455,7 +480,7 @@ def check_or_fetch(sid, start, end, species, dtbin='T'):
     else:
         print(files)
         
-    merged = JediData(filename=files[0], start=start, end=end, species=species, dtbin=dtbin)
+    merged = JediData(filename=files[0], start=start, end=end, species=species, dtbin=dtbin, efilter=efilter)
     
     if len(files) == 1:
         return merged
@@ -464,6 +489,6 @@ def check_or_fetch(sid, start, end, species, dtbin='T'):
     for i in range(1, len(files)):
         
         merged = merge_two_jedi_data(
-            merged, JediData(filename=files[i], start=start, end=end, species=species, dtbin=dtbin)) 
+            merged, JediData(filename=files[i], start=start, end=end, species=species, dtbin=dtbin, efilter=efilter)) 
         
     return merged

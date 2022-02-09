@@ -95,3 +95,37 @@ def find_ticks_between(start, end, nticks=6):
                 '{:7.2f}'.format(Latitude))
 
     return time_array, tickstring
+
+
+def find_ticks_between_GPhiO(start, end, nticks=6):
+    """
+    Given an axes object make the ticks appropriately for subplots.
+    """
+    from JunoPy.spice import InitSpiceKernels, get_juno_position
+
+    time_array = pd.date_range(
+        start=start, end=end, periods=nticks).to_pydatetime().tolist()
+
+    InitSpiceKernels()
+    position, _ = get_juno_position(time_array,
+                                    coordsystem='JUNO_GANYMEDE_PHI_O',
+                                    center='503')
+
+
+    tickstring = []
+    for i, pos in enumerate(position):
+        
+        if i == 0:
+            tickstring.append(
+                'Time - {:s}'.format(time_array[i].strftime('%H:%M:%S')) + '\n' +
+                'X (R) - {:7.2f}'.format(pos[0]) + '\n' +
+                'Y (R) - {:7.2f}'.format(pos[1]) + '\n' +
+                'Z (R) - {:7.2f}'.format(pos[2]))
+        else:
+            tickstring.append(
+                '{:s}'.format(time_array[i].strftime('%H:%M:%S')) + '\n' +
+                '{:7.2f}'.format(pos[0]) + '\n' +
+                '{:7.2f}'.format(pos[1]) + '\n' +
+                '{:7.2f}'.format(pos[2]))
+
+    return time_array, tickstring

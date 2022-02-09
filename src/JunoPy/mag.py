@@ -137,7 +137,7 @@ class MagData(object):
         self.df['alpha'] = np.arctan2(self.df['Bphi'], self.df['Br']) * 180 / np.pi
     
     
-    def plot(self, vars=None, axs=None, Bfit=None):
+    def plot(self, vars=None, axs=None, Bfit=None, color='k'):
         """
         Plot magnetometer data. Returns an axes object.
         """
@@ -156,7 +156,7 @@ class MagData(object):
         
         for i, ax in enumerate(axs):
             
-            ax.plot(self.df.index, self.df[vars[i]], color='k', lw=0.75)
+            ax.plot(self.df.index, self.df[vars[i]], color=color, lw=0.75)
             ax.grid()
             
             # ax.xaxis.set_minor_locator(AutoMinorLocator())
@@ -339,7 +339,7 @@ def merge_magdata(m1, m2):
 # ==================================================================
 class ForceFreeFluxRope(object):
     
-    def __init__(self, magfile, start, end, dofit=True):
+    def __init__(self, magfile, start, end, dofit=True, alpha='positive'):
         """Main function for force free fit."""
         
         magdata = MagData(filename=magfile)
@@ -362,7 +362,7 @@ class ForceFreeFluxRope(object):
         magdata_mva.df['By'] /= magdata_mva.df['Bmag']
         magdata_mva.df['Bz'] /= magdata_mva.df['Bmag']
 
-        Ti, initParams, T0, mid = self.init_params(magdata_mva)
+        Ti, initParams, T0, mid = self.init_params(magdata_mva, alpha=alpha)
 
         eTraj = np.zeros(3)
         eTraj[0] = magdata_mva.df['X'][-1] - magdata_mva.df['X'][0]
@@ -436,7 +436,7 @@ class ForceFreeFluxRope(object):
         return B[:, 0], B[:, 1], B[:, 2]
 
     
-    def init_params(self, mvadata):
+    def init_params(self, mvadata, alpha='positive'):
         """
         Initialize flux rope parameters.
         """
@@ -460,7 +460,12 @@ class ForceFreeFluxRope(object):
         Ti = np.asarray(Ti)
 
         initParams = Parameters()
-        initParams.add('alpha', value=2.4048, min=-2.4048, max=2.4048)
+        
+        if 'positive' in alpha:
+            initParams.add('alpha', value=2.4048, vary=False) #min=-2.4048, max=2.4048)
+        else:
+            initParams.add('alpha', value=-2.4048, vary=False)
+            
         initParams.add('B0', value=1.0, vary=False)
         initParams.add('IF', value=0.5, min=0., max=1.)
         initParams.add('thetaA', value=thetaA, min=0., max=np.pi)
@@ -719,7 +724,7 @@ class AutoPlasmoid(object):
         """
         # To save time and get the best data. We concentrate on certain radial ranges and local times
         if magdata.df.loc[crossing1, 'R'] > 90 * R_JUPITER or magdata.df.loc[crossing1, 'LT'] > 5:
-            return None
+            return None, None, None, None
         
         # FILTER 1: Select based on window size < 10 min.
         df = magdata.df.loc[crossing1 - dt.timedelta(minutes=window): 
@@ -764,16 +769,16 @@ class AutoPlasmoid(object):
         tneg = None
         tpos2 = None
         
-        for pos1 in maxima:
-            for neg in minima:
-                for pos2 in maxima:
+        for p1 in maxima:
+            for n in minima:
+                for p2 in maxima:
                     
-                    if not ((pos1 < crossing1 < neg) and \
-                            (neg < crossing2 < pos2)):
+                    if not ((p1 < crossing1 < n) and \
+                            (n < crossing2 < p2)):
                         continue
                     
-                    rsqr1 = calc_rsqr(pos1, neg)
-                    rsqr2 = calc_rsqr(neg, pos2)
+                    rsqr1 = calc_rsqr(p1, n)
+                    rsqr2 = calc_rsqr(n, p2)
                     
                     if not ((0 <= rsqr1 < 1) and (0 <= rsqr2 < 1)):
                         continue
@@ -783,21 +788,32 @@ class AutoPlasmoid(object):
                     # Check for minima.    
                     if rsqr > max_rsqr:
                         
-                        tpos1 = pos1
-                        tneg = neg
-                        tpos2 = pos2
+                        tpos1 = p1
+                        tneg = n
+                        tpos2 = p2
                         max_rsqr = rsqr
         
-        ## verification        
+        ## verification  
+        
+        if not (tpos2 and tpos1 and tneg) or not (tpos1 < tneg < tpos2):
+            return None, None, None, None
+        
+        # Btheta should be positive before and after plasmoid event.
+        if magdata.df.loc[tpos1, 'Btheta'] < 0 or magdata.df.loc[tpos2, 'Btheta'] < 0:
+            return None, None, None, None
         
         # 1. Check size of event.
-        if (tpos2 - tpos1).total_seconds() / 60 > window:
-            print('Event too large')
-            return None, None, None
+        if (tpos2 - tpos1).total_seconds() > window * 60:
+            # print('Event too large')
+            return None, None, None, None
+        
+        if ((tpos2 - tneg) < dt.timedelta(seconds=5)) or \
+           ((tneg - tpos1) < dt.timedelta(seconds=5)):
+            return None, None, None, None
         
         # 2. Ignore weak events. 
-        dbtheta1 = np.abs(df.loc[tpos1, 'Btheta'] - df.loc[neg, 'Btheta'])
-        dbtheta2 = np.abs(df.loc[tpos2, 'Btheta'] - df.loc[neg, 'Btheta'])
+        dbtheta1 = np.abs(df.loc[tpos1, 'Btheta'] - df.loc[tneg, 'Btheta'])
+        dbtheta2 = np.abs(df.loc[tpos2, 'Btheta'] - df.loc[tneg, 'Btheta'])
         
         btheta_std = magdata.df.loc[
             tpos1 - dt.timedelta(minutes=5*window): 
@@ -805,42 +821,72 @@ class AutoPlasmoid(object):
         
         if (dbtheta1 < 2 or dbtheta2 < 2 or \
             (dbtheta2 < btheta_std and dbtheta2 < btheta_std)):
-            print('Event too weak')
-            return None, None, None
+            # print('Event too weak')
+            return None, None, None, None
         
         # 3. Ignore events with Br > 2 nT (lobes)
-        if magdata.df.loc[tpos1:tpos2, 'Br'].mean() > 2 or \
-           magdata.df.loc[tpos1:tpos2, 'Br'].median() > 2:
-            print('Event in the lobes')
-            return None, None, None
+        if (magdata.df.loc[tpos1:tpos2, 'Br'].abs().mean() > 2) or \
+           (magdata.df.loc[tpos1:tpos2, 'Br'].abs().median() > 2):
+            # print('Event in the lobes')
+            return None, None, None, None
         
         # 3. Verify using MVA 
- 
-        magdata_mva = copy.copy(magdata)
     
         def test_mva(t1, t2):
             
             mva = copy.copy(magdata)
             mva.df = mva.df.loc[t1:t2].copy()
             
-            mva.perform_mva()
-            
+            try:
+                mva.perform_mva()
+            except np.linalg.LinAlgError:
+                print(t1, t2)
+                print(mva.df)
+                raise Exception('Stopped.')
+        
             if (np.abs(mva.x3[2] < 0.8)) or (mva.P < 4.5) or \
                 (np.abs(mva.eigval[2] / mva.eigval[1]) < 3) or \
                 (np.abs(mva.eigval[1] / mva.eigval[0]) < 3) or \
                 (mva.df['B1'].abs().mean() > 2) or \
-                (mva.df['B1'].abs().median() > 2):
+                (mva.df['B1'].abs().median() > 2) or \
+                (np.sign(mva.df['B3'].min()) == np.sign(mva.df['B3'].max())):
                 
                 return False
-            
+    
             return True
         
-        if not(test_mva(tpos1, tneg) or test_mva(tneg, tpos2)):
-            print('MVA test failed.')
-            
-            return None, None, None
+        mvatest1 = test_mva(tpos1, tneg)
+        mvatest2 = test_mva(tneg, tpos2)
         
-        return tpos1, tneg, tpos2
+        
+        # Lastly, it would be good to identify which of the two reversals 
+        # corresponds to a plasmoid and which to the PPPS. 
+        
+        # Conditions for plasmoid:
+        
+        if not(mvatest1 or mvatest2):
+            # print('MVA test failed.')
+            
+            return None, None, None, None
+
+        elif mvatest1 and not mvatest2:
+            plasmoidreversal = 1
+            tpos2 = crossing2 
+            
+        elif mvatest2 and not mvatest1:
+            plasmoidreversal = 2
+            tpos1 = crossing1
+            
+        else:
+            if (tpos2 - tneg) > (tneg - tpos1):
+                plasmoidreversal = 1
+                tpos2 = crossing2
+            else:
+                plasmoidreversal = 2
+                tpos1 = crossing1
+            
+        
+        return tpos1, tneg, tpos2, plasmoidreversal
     
     
     @staticmethod
@@ -850,6 +896,7 @@ class AutoPlasmoid(object):
         times_pos1 = []
         times_neg = []
         times_pos2 = []
+        motions = []
         
         for c1 in crossings[:-1]:
             for c2 in crossings[1:]:
@@ -858,5 +905,6 @@ class AutoPlasmoid(object):
                     times_pos1.append(times[0])
                     times_neg.append(times[1])
                     times_pos2.append(times[2])
+                    motions.append(times[3])
             
-        return times_pos1, times_neg, times_pos2
+        return times_pos1, times_neg, times_pos2, motions

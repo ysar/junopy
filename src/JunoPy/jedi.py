@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import datetime as dt
 import glob
+import scipy.optimize
 
 from matplotlib import ticker
 import matplotlib.colors as colors
@@ -28,25 +29,20 @@ class JediData:
     pitchangles = np.linspace(0, 170, 18)
     
     def __init__(self, filename=None, start=None, end=None, 
-                 species=None, dtbin='T', efilter=None):
+                 species=None, dtbin='T', efilter=None, freqlimit=[]):
         
         
         if not filename:   # Useful for creating empty JediData object.
             return None
         
         self.filename = filename
-        
-        self.species = species
-        
+        self.species = species   
         self.dtbin = dtbin
-        
         self.efilter = efilter
         
         self.read_csv_file()
         
         if start and end:
-            
-            
             self.df_raw = self.df_raw.loc[start.strftime('%Y-%m-%d %H:%M:%S'):
                                           end.strftime('%Y-%m-%d %H:%M:%S')]
             
@@ -114,13 +110,12 @@ class JediData:
             df = df[~df['channels'].str.contains(filter_string)]
             filter_string = df['channels'][2][-7:]    # Filter lowest3 E channel for e-.
             df = df[~df['channels'].str.contains(filter_string)]
-            filter_string = df['channels'][3][-7:]    # Filter lowest3 E channel for e-.
+            filter_string = df['channels'][3][-7:]    # Filter lowest4 E channel for e-.
             df = df[~df['channels'].str.contains(filter_string)]
             
         if self.species == 'PROTON':
             filter_string = df['channels'][0][-7:]    # Filter lowest E channel for H+.
             df = df[~df['channels'].str.contains(filter_string)]
-            
             
         if self.efilter:
             df = df[(df['lowEbins'] >= self.efilter[0]) & (df['highEbins'] <= self.efilter[1])]
@@ -139,7 +134,7 @@ class JediData:
         else:
             self.species = 'e-'
 
-            
+        
         self.metadata = df
         
     
@@ -149,20 +144,6 @@ class JediData:
         # Create pandas dataframe with Energy / time 
         collect_durations = self.df_raw['Duration'].values
         
-#         if self.dtbin == 'T':
-#             self.energytime = self.df_raw[self.metadata['channels']]\
-#                 .apply(lambda x: x * collect_durations, axis=0)\
-#                 .resample('T', offset='30S')\
-#                 .sum()\
-#                 .apply(lambda x: x / 60 / (4 * np.pi), axis=0)
-            
-#         elif self.dtbin == '30S':
-#             self.energytime = self.df_raw[self.metadata['channels']]\
-#                 .apply(lambda x: x * collect_durations, axis=0)\
-#                 .resample('30S', offset='15S')\
-#                 .sum()\
-#                 .apply(lambda x: x / 30 / (4 * np.pi), axis=0)
-            
         if self.dtbin == 'T':
             self.energytime = self.df_raw[self.metadata['channels']]\
                 .resample('T', offset='30S')\
@@ -172,8 +153,12 @@ class JediData:
             self.energytime = self.df_raw[self.metadata['channels']]\
                 .resample('30S', offset='15S')\
                 .mean()
+            
+        elif self.dtbin == '15S':
+            self.energytime = self.df_raw[self.metadata['channels']]\
+                .resample('15S', offset='7500ms')\
+                .mean()
 
-        
         # Create energy bins manually based on the largest allowable bins based on min and max.
         
         if len(self.metadata) % self.nSSD != 0:
@@ -226,36 +211,16 @@ class JediData:
                 condition = (pitchanglecols['Pitch_Angle_T{:d}'.format(k)] >= pa) & \
                             (pitchanglecols['Pitch_Angle_T{:d}'.format(k)] < pa + 10)
 
-#                 self.pitchangletime.loc[condition, 'Intensity_PA_bin_{:d}'.format(j)] += \
-#                     self.pitchangletime.loc[condition, 'SSD{:d} Counts'.format(k)].values
-
                 self.pitchangletime.loc[condition, 'Intensity_PA_bin_{:d}'.format(j)] += \
                     self.pitchangletime.loc[
                         condition, 
                         self.pitchangletime.columns.str.contains('T{:d}'.format(k))].mean(axis=1)
-                    # .apply(lambda x: (x.values).mean(), axis=1)  # *diffE).sum()
     
                 self.pitchangletime.loc[condition, 'nSSDs_PA_bin_{:d}'.format(j)] += 1
             
             self.pitchangletime['Intensity_PA_bin_{:d}'.format(j)] /= \
                 self.pitchangletime['nSSDs_PA_bin_{:d}'.format(j)]
         
-            
-#         if self.dtbin == 'T':
-#             self.pitchangletime = self.pitchangletime\
-#                 .loc[:, self.pitchangletime.columns.str.contains('Intensity_PA_bin')]\
-#                 .apply(lambda x: x * collect_durations, axis=0)\
-#                 .resample('T', offset='30S')\
-#                 .sum()\
-#                 .apply(lambda x: x / 60, axis=0)
-            
-#         elif self.dtbin == '30S':
-#             self.pitchangletime = self.pitchangletime\
-#                 .loc[:, self.pitchangletime.columns.str.contains('Intensity_PA_bin')]\
-#                 .apply(lambda x: x * collect_durations, axis=0)\
-#                 .resample('30S', offset='15S')\
-#                 .sum()\
-#                 .apply(lambda x: x / 30, axis=0)
             
         if self.dtbin == 'T':
             self.pitchangletime = self.pitchangletime\
@@ -268,7 +233,12 @@ class JediData:
                 .loc[:, self.pitchangletime.columns.str.contains('Intensity_PA_bin')]\
                 .resample('30S', offset='15S')\
                 .mean()
-
+            
+        elif self.dtbin == '15S':
+            self.pitchangletime = self.pitchangletime\
+                .loc[:, self.pitchangletime.columns.str.contains('Intensity_PA_bin')]\
+                .resample('15S', offset='7500ms')\
+                .mean()
         
         for key in self.pitchangletime.keys():
             if not 'Intensity_PA_bin' in key:
@@ -284,11 +254,14 @@ class JediData:
         if self.dtbin == 'T':
             timearray = (self.energytime.index - dt.timedelta(seconds=30)).to_pydatetime()
         elif self.dtbin == '30S':
-            timearray = (self.energytime.index - dt.timedelta(seconds=15)).to_pydatetime() 
+            timearray = (self.energytime.index - dt.timedelta(seconds=15)).to_pydatetime()
+        elif self.dtbin == '15S':
+            timearray = (self.energytime.index - dt.timedelta(seconds=7.5)).to_pydatetime()
             
         timearray = np.append(timearray, timearray[-1] + (timearray[1] - timearray[0]))
 
         # Create y data (pitch-angle or energy bins)
+        
         bins = []
         for lbin, hbin in zip(self.energybins_low, self.energybins_high):
                 bins.extend([lbin, hbin])    
@@ -340,7 +313,9 @@ class JediData:
         if self.dtbin == 'T':
             timearray = (self.energytime.index - dt.timedelta(seconds=30)).to_pydatetime()
         elif self.dtbin == '30S':
-            timearray = (self.energytime.index - dt.timedelta(seconds=15)).to_pydatetime() 
+            timearray = (self.energytime.index - dt.timedelta(seconds=15)).to_pydatetime()
+        elif self.dtbin == '15S':
+            timearray = (self.energytime.index - dt.timedelta(seconds=7.5)).to_pydatetime()
             
         timearray = np.append(timearray, timearray[-1] + (timearray[1] - timearray[0]))
 
@@ -405,7 +380,68 @@ class JediData:
         
         ax.set_ylabel('{:s}\nDiff.\nIntensity'.format(self.species))
         ax.yaxis.set_major_locator(ticker.LogLocator(base=10, numticks=15))
+        
+        
+    def calc_energy_spectral_index(self):
+        
+        self.energytime.fillna(value=0, inplace=True)
+        
+        self.energytime = self.energytime[np.isfinite(self.energytime).all(axis=1)]
+        
+        Ii = self.energytime.iloc[0].values
+        Ei = np.sqrt(self.energybins_high * self.energybins_low)
+
+        def dofit(row):
+            
+            
+            Ii = row.values
+
+            def fit_func(E, a, b, gamma):
+                return a + gamma * b - gamma * E
+            try:
+                fit, covar = scipy.optimize.curve_fit(fit_func, np.log(Ei), np.log(Ii))
+            except ValueError:
+                return np.NaN, np.NaN, np.NaN
+            
+            return np.exp(fit[0]), np.exp(fit[1]), fit[2], np.sqrt(np.abs(np.diag(covar)))[-1]
+        
+        df = self.energytime.copy()
+        df = df.apply(dofit, axis=1, result_type='expand')
+        df.rename(columns={0:'I0', 1:'E0', 2:'gamma', 3:'sigma_gamma'}, inplace=True)    
+        # df[(~np.isfinite(df)) & (df.notnull())] = np.NaN
+        
+#         for x in df.keys():
+#             if 'Channel' in x:
+#                 df.drop(x, axis=1, inplace=True)
     
+        self.spectralindex = df.copy()
+        
+    def plot_energy_spectral_index(self, ax=None):
+        
+        ax.plot(self.spectralindex.index, self.spectralindex['gamma'], zorder=3)
+        
+        ax.fill_between(self.spectralindex.index,
+                        self.spectralindex['gamma'] - self.spectralindex['sigma_gamma'],
+                        self.spectralindex['gamma'] + self.spectralindex['sigma_gamma'],
+                        color='lightgrey', zorder=1)
+        
+        ax.set_ylabel('{:s}\n'.format(self.species) + '$\gamma$')
+    
+    
+    def save_spectral_index(self, folder='data/spectralindex'):
+        
+        if not os.path.exists(folder):
+            os.mkdir(folder)
+            
+        filename = os.path.join(
+            folder,
+            self.energytime.index[0].strftime('%Y-%j') + '.hdf5')
+        
+        self.spectralindex.to_hdf(filename,
+                                  self.energytime.index[0].strftime('%Y-%j'),
+                                  mode='w')
+        
+        
     
 def merge_two_jedi_data(j1, j2):
     """
@@ -473,9 +509,10 @@ def check_or_fetch(sid, start, end, species, dtbin='T', efilter=None):
         jediindex.get_files_between_dates(start, end, DoDownload=True, sid=sid)
         
         files = glob.glob('data/jedi/*{:s}_CDR_{:s}_*.TAB'.format(sid, start.strftime('%Y%j')))
-    
+        
     
     if len(files) == 0:
+        print('no JEDI files found')
         return None
     else:
         print(files)

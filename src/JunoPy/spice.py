@@ -23,7 +23,7 @@ class InitSpiceKernels(object):
     isKernelsExists = False
     indexfile = os.path.join(SPICE_DIR, 'index_spice.csv')
     
-    def __init__(self):
+    def __init__(self, dodownload=False):
         """
         Creating a JunoSpiceKernel object downloads the index file and
         identifies which kernels are useful. If not previously done,
@@ -31,7 +31,7 @@ class InitSpiceKernels(object):
         """
         
         self.isKernelsExists = os.path.exists(KERNEL_DIR)
-        if not self.isKernelsExists:
+        if not self.isKernelsExists or dodownload:
             print("Kernels don't exist, downloading ...")
             self.download_index_file()
             self.find_kernels()
@@ -109,24 +109,29 @@ class InitSpiceKernels(object):
             f.write("\\begintext\n")
 
 
-def get_juno_position(times, coordsystem='JUNO_JSS'):
+def get_juno_position(times, coordsystem='JUNO_JSS', center='JUPITER'):
     """
     Fetch juno position for a list of spacecraft times.
     Input should be in datetime.
     """
     metafile = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
     spice.furnsh(metafile)
-
+    spice.furnsh(os.path.join(SPICE_DIR, 'kernels', 'juno_phi_o_v1.tf'))
+    
     times_converted = []
     for time in times:
         times_converted.append(
             spice.str2et(dt.datetime.strftime(time, '%Y-%m-%dT%H:%M:%S.%f')))
 
     position, lightTimes = spice.spkpos(
-        'Juno', times_converted, coordsystem, 'NONE', 'JUPITER BARYCENTER')
+        'Juno', times_converted, coordsystem, 'NONE', center)
 
     spice.kclear()
-    position = np.asarray(position) / 71492
+    
+    if 'JUPITER' in center:
+        position = np.asarray(position) / 71492
+    elif '503' in center or 'GANYMEDE' in center:
+        position = np.asarray(position) / 2634
 
     return position, lightTimes
 
@@ -139,7 +144,7 @@ def get_ganymede_pos(time, coordsystem='IAU_JUPITER'):
     time_converted = spice.str2et(time.strftime('%Y-%m-%dT%H:%M:%S.%f'))
     
     position, lighttime = spice.spkpos(
-        'GANYMEDE', time_converted, coordsystem, 'NONE', 'JUPITER BARYCENTER')
+        'GANYMEDE', time_converted, coordsystem, 'NONE', 'JUPITER')
     
     spice.kclear()
     

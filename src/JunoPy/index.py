@@ -26,7 +26,7 @@ class IndexFile(object):
 
     outfolder = 'index'
 
-    def __init__(self, dataset=''):
+    def __init__(self, dataset='', dodownload=False):
 
         if dataset:
             self.dataset = dataset
@@ -36,7 +36,8 @@ class IndexFile(object):
         
         if not os.path.exists(
             os.path.join(self.outfolder, 
-                         'index_{:s}.csv'.format(self.dataset))):
+                         'index_{:s}.csv'.format(self.dataset))) or dodownload:
+            print('Downloading index file...')
             self.download_index_file()
             
         self.filename = os.path.join(
@@ -135,7 +136,8 @@ class IndexFile(object):
             df_masked = df_masked[df_masked['SID'].str.contains(sid)]
 
         filelist = [x.strip() for x in df_masked['FILE_SPECIFICATION_NAME']]
-
+        print(filelist)
+        
         if DoDownload and len(filelist) > 0:
             urls = []
 

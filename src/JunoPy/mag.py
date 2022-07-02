@@ -5,6 +5,7 @@ import datetime as dt
 import h5py
 import copy
 import itertools
+import spiceypy as spice
 
 
 from scipy.special import jv
@@ -24,7 +25,8 @@ class MagData(object):
         "Bx", "By", "Bz", "Brange", "X", "Y", "Z"
     ]
 
-    def __init__(self, filename=None, ishdf=True, start=None, end=None):
+    def __init__(self, filename=None, ishdf=True, start=None, end=None, 
+                 coordsystem='JUNO_JSS'):
         """
         Class to parse magnetometer data files. Stores data into a pandas
         dataframe.
@@ -39,6 +41,9 @@ class MagData(object):
         
         if start and end:
             self.df = self.df.loc[start - dt.timedelta(minutes=5): end + dt.timedelta(minutes=5)].copy()
+            
+        if not 'JUNO_JSS' in coordsystem:
+            self.convert_to_coordsystem(coordsystem)
             
     def __repr__(self):
         """String representation for class. Writes the dataframe head"""
@@ -128,6 +133,27 @@ class MagData(object):
             np.cos(phi) * self.df['By']
     
     
+    def convert_to_coordsystem(self, coordsystem):
+        spice.furnsh("spice/JunoMetaKernel.txt")
+        spice.furnsh("spice/kernels/juno_phi_o_v1.tf")
+
+        def tmp_func_convert(row, coordsystem=coordsystem):
+
+            time = spice.str2et(row.name.strftime('%Y-%m-%d %H:%M:%S'))
+            R = spice.pxform('JUNO_JSS', coordsystem, time) #'GPHIO_CORRECTED'
+            B = np.array([row['Bx'], row['By'], row['Bz']])
+
+            B_new = np.matmul(R, B)  #R1
+            return B_new[0], B_new[1], B_new[2]
+        
+        t = self.df.apply(tmp_func_convert, axis=1, result_type='expand')
+        self.df['Bx'], self.df['By'], self.df['Bz'] \
+            = t[0], t[1], t[2]
+        
+        self.convert_to_spherical()
+        
+# magdata.df_new.rename(columns={0:'Bx_GPhiO', 1:'By_GPhiO', 2:'Bz_GPhiO', 3:'X_GPhiO', 4:'Y_GPhiO', 5:'Z_GPhiO'}, inplace=True)
+        
     def calculate_bendback(self):
         """
         Calculate bendback angle alpha.
@@ -247,8 +273,7 @@ class MagData(object):
             y='omega_ce',
             ax=ax,
             color='k',
-            legend=False,
-            lw=0.4
+            legend=False
         )
         return ax
     
@@ -320,6 +345,7 @@ class MagData(object):
                      * (np.sqrt(self.eigval[2]) - np.sqrt(self.eigval[1]))
                      * (np.sqrt(self.eigval[1]) - np.sqrt(self.eigval[0]))
                      / np.sqrt(self.eigval[2]**3))
+        
 
 def merge_magdata(m1, m2):
     """Merge two magdata files. Usually used for concatenation."""

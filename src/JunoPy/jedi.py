@@ -29,7 +29,7 @@ class JediData:
     pitchangles = np.linspace(0, 170, 18)
     
     def __init__(self, filename=None, start=None, end=None, 
-                 species=None, dtbin='T', efilter=None, freqlimit=[]):
+                 species=None, dtbin='T', efilter=None):
         
         
         if not filename:   # Useful for creating empty JediData object.

@@ -13,7 +13,7 @@ from JunoPy.index import IndexFile
 
 class WavesData(object):
 
-    def __init__(self, start=None, end=None, filename=None, findcutoff=False):
+    def __init__(self, start=None, end=None, filename=None, findcutoff=False, flimits=[]):
         """
         Class to parse data from the Waves instrument.
         """
@@ -27,7 +27,10 @@ class WavesData(object):
             
         if findcutoff:
             self.find_cutoff()
-
+            
+        if len(flimits) > 0:
+            self.channels = self.channels[(self.channels['freq'] >= flimit[0]) & 
+                                          (self.channels['freq'] <= flimit[1])]
 
     def parse_waves_file(self):
         """
@@ -92,6 +95,9 @@ class WavesData(object):
             columns=['SCET', 'SCLK (sec)']
             )
         
+    def limit_freq(self, lower, upper):
+        self.channels = self.channels[(self.channels['freq'] >= lower) & 
+                                      (self.channels['freq'] <= upper)]
         
     @staticmethod
     def calc_cutoff(x, freq):
@@ -108,8 +114,25 @@ class WavesData(object):
         
     def find_cutoff(self):
         """Find the low-frequency cutoff for the continuum radiation"""
-        self.df['cutoff'] = self.df[self.channels['names']].apply(lambda x: WavesData.calc_cutoff(x, self.channels['freq'].values), axis=1)
+        self.df['cutoff'] = self.df[self.channels['names']].apply(
+            lambda x: WavesData.calc_cutoff(x, self.channels['freq'].values), axis=1)
         
+    @staticmethod
+    def calc_upperhybrid(x, freq):
+            
+        intensity = x.values
+        
+        maxima = scipy.signal.argrelextrema(np.log(intensity), np.greater, order=10)[0]
+        if len(maxima) > 0:
+            return freq[maxima[-1]]
+        else:
+            return np.NaN
+        
+        
+    def find_upperhybrid(self):
+        """Find the low-frequency cutoff for the continuum radiation"""
+        self.df['UH'] = self.df[self.channels['names']].apply(
+            lambda x: WavesData.calc_upperhybrid(x, self.channels['freq'].values), axis=1)
 
     def plot(self, ax=None, magdata=None, extendmag=False,
              flow=50, fhigh=20e3, vmin=None, vmax=None, 

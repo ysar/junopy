@@ -934,3 +934,8 @@ class AutoPlasmoid(object):
                     motions.append(times[3])
             
         return times_pos1, times_neg, times_pos2, motions
+    
+    
+    
+# =========================================================================
+

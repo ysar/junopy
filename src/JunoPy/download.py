@@ -3,26 +3,34 @@ Contains methods to download files using :mod:`wget`.
 """
 
 import os
-import wget
+# import wget
 import glob
 import time
+import urllib.request
 
-def download_file(url, outfolder=''):
-    """
-    Downloads a file given its url. Replaces any file with the same name in the
-    output directory.
+def download_file(fileurl, fileoutname):
+    """Opens a URL and downloads it's contents onto disk."""
+    with urllib.request.urlopen(fileurl) as g:
+        with open(fileoutname, 'wb+') as f:
+            f.write(g.read()) #.decode('UTF-8'))
+            
+            
+# def download_file_wget(url, outfolder=''):
+#     """
+#     Downloads a file given its url. Replaces any file with the same name in the
+#     output directory.
     
-    :param str url: The URL for the file to be downloaded.
-    :param str outfolder: Output directory. Default is current directory.
-    """
-    if outfolder and not os.path.exists(outfolder):
-        os.makedirs(outfolder)
+#     :param str url: The URL for the file to be downloaded.
+#     :param str outfolder: Output directory. Default is current directory.
+#     """
+#     if outfolder and not os.path.exists(outfolder):
+#         os.makedirs(outfolder)
 
-    outfile = os.path.join(outfolder, url.split('/')[-1])
-    if os.path.exists(outfile):
-        os.remove(outfile)
+#     outfile = os.path.join(outfolder, url.split('/')[-1])
+#     if os.path.exists(outfile):
+#         os.remove(outfile)
 
-    wget.download(url, bar=None, out=outfile)
+#     wget.download(url, bar=None, out=outfile)
 
 
 def download_multiple_files(urls, outfolder=''):
@@ -54,12 +62,8 @@ def download_multiple_files(urls, outfolder=''):
 
         down.append(
             pool.apply_async(
-                wget.download,
-                args=(url,),
-                kwds={
-                    'bar': None,
-                    'out': outfile
-                 }
+                download_file,
+                args=(url, outfile),
             )
         )
 

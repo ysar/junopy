@@ -34,6 +34,9 @@ class IndexFile(object):
         else:
             raise Exception('Specify dataset.')
         
+        if not os.path.exists(self.outfolder):
+            os.mkdir(self.outfolder)
+            
         if not os.path.exists(
             os.path.join(self.outfolder, 
                          'index_{:s}.csv'.format(self.dataset))) or dodownload:
@@ -51,8 +54,10 @@ class IndexFile(object):
         """
         Downloads the index file from PDS for the specified dataset.
         """
-        download_file(self.url, outfolder=self.outfolder)
-        assert(os.path.exists(os.path.join(self.outfolder, 'INDEX.TAB')))
+        
+        outfile = os.path.join(self.outfolder, 'INDEX.TAB')
+        download_file(self.url, os.path.join(self.outfolder, 'INDEX.TAB'))
+        assert(os.path.exists(outfile))
 
         os.rename(
             os.path.join(self.outfolder, 'INDEX.TAB'),

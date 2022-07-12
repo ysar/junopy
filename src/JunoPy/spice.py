@@ -16,7 +16,9 @@ SPICE_DIR = 'spice'
 KERNEL_DIR = os.path.join(SPICE_DIR, 'kernels')
 JUNO_SPICE_URL = "https://naif.jpl.nasa.gov/pub/naif/pds/data/jno-j_e_ss-spice-6-v1.0/jnosp_1000/"
 METAFILE = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
-JUNO_SPECIFIC_KERNEL = "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00010.tpc"
+JUNO_SPECIFIC_KERNELS = [
+    "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00010.tpc",
+    "https://naif.jpl.nasa.gov/pub/naif/JUNO/misc/jszalay/juno_phi_o_v1.tf"]
 
 class InitSpiceKernels(object):
 
@@ -33,10 +35,14 @@ class InitSpiceKernels(object):
         self.isKernelsExists = os.path.exists(KERNEL_DIR)
         if not self.isKernelsExists or dodownload:
             print("Kernels don't exist, downloading ...")
+            if not os.path.exists(SPICE_DIR):
+                os.mkdir(SPICE_DIR)
+            if not os.path.exists(os.path.join(KERNEL_DIR)):
+                os.mkdir(KERNEL_DIR)
             self.download_index_file()
             self.find_kernels()
             self.download_kernels()
-            self.download_juno_specific_kernel()
+            self.download_juno_specific_kernels()
         else:
             self.find_kernels()
             
@@ -45,7 +51,9 @@ class InitSpiceKernels(object):
     def download_index_file(self):
         """Downloads the spice kernel index file from NAIF."""
         INDEX_URL = JUNO_SPICE_URL + "index/index.tab"
-        download_file(INDEX_URL, outfolder=SPICE_DIR)
+        outfile = os.path.join(SPICE_DIR, 'index.tab')
+        
+        download_file(INDEX_URL, outfile)
         os.rename(
             os.path.join(SPICE_DIR, 'index.tab'),
             os.path.join(SPICE_DIR, 'index_spice.csv'))
@@ -84,12 +92,21 @@ class InitSpiceKernels(object):
                 os.path.split(row['FILE_SPECIFICATION_NAME'])[0],
                 row['KERNEL_FILENAME']
             )
-            download_file(file_url, outfolder=KERNEL_DIR)
+            outfile = os.path.join(
+                KERNEL_DIR, row['KERNEL_FILENAME'])
+            
+            download_file(file_url, outfile)
         self.isKernelsExists = True
         
     
-    def download_juno_specific_kernel(self):
-        download_file(JUNO_SPECIFIC_KERNEL, outfolder=KERNEL_DIR)
+    def download_juno_specific_kernels(self):
+        
+        for kernel in JUNO_SPECIFIC_KERNELS:
+            outfile = os.path.join(
+                KERNEL_DIR,
+                kernel.split('/')[-1])
+
+            download_file(kernel, outfile)
         
 
     def create_meta_kernel_file(self):
@@ -103,8 +120,9 @@ class InitSpiceKernels(object):
                 filename = os.path.join(KERNEL_DIR, kernel['KERNEL_FILENAME'])
                 f.write("'{:s}',\n".format(filename))
             
-            f.write("'{:s}',\n".format(
-                os.path.join(KERNEL_DIR, os.path.split(JUNO_SPECIFIC_KERNEL)[-1])))
+            for kernel in JUNO_SPECIFIC_KERNELS:
+                f.write("'{:s}',\n".format(
+                    os.path.join(KERNEL_DIR, kernel.split('/')[-1])))
             f.write(")\n")
             f.write("\\begintext\n")
 

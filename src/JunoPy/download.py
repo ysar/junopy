@@ -14,24 +14,6 @@ def download_file(fileurl, fileoutname):
         with open(fileoutname, 'wb+') as f:
             f.write(g.read()) #.decode('UTF-8'))
             
-            
-# def download_file_wget(url, outfolder=''):
-#     """
-#     Downloads a file given its url. Replaces any file with the same name in the
-#     output directory.
-    
-#     :param str url: The URL for the file to be downloaded.
-#     :param str outfolder: Output directory. Default is current directory.
-#     """
-#     if outfolder and not os.path.exists(outfolder):
-#         os.makedirs(outfolder)
-
-#     outfile = os.path.join(outfolder, url.split('/')[-1])
-#     if os.path.exists(outfile):
-#         os.remove(outfile)
-
-#     wget.download(url, bar=None, out=outfile)
-
 
 def download_multiple_files(urls, outfolder=''):
     """

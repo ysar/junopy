@@ -8,123 +8,57 @@ import numpy as np
 import datetime as dt
 import pandas as pd
 import spiceypy as spice
+import ftplib
 
-
-from JunoPy.download import download_file
+from JunoPy.download import download_file, download_multiple_files
 
 SPICE_DIR = 'spice'
 KERNEL_DIR = os.path.join(SPICE_DIR, 'kernels')
 JUNO_SPICE_URL = "https://naif.jpl.nasa.gov/pub/naif/pds/data/jno-j_e_ss-spice-6-v1.0/jnosp_1000/"
 METAFILE = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
-JUNO_SPECIFIC_KERNELS = [
-    "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00010.tpc",
-    "https://naif.jpl.nasa.gov/pub/naif/JUNO/misc/jszalay/juno_phi_o_v1.tf"]
 
-class InitSpiceKernels(object):
 
-    isKernelsExists = False
-    indexfile = os.path.join(SPICE_DIR, 'index_spice.csv')
+def download_juno_kernels(doDownload=True):
+    """Downloads all relevant Juno related SPICE kernels into a directory."""
     
-    def __init__(self, dodownload=False):
-        """
-        Creating a JunoSpiceKernel object downloads the index file and
-        identifies which kernels are useful. If not previously done,
-        the relevant kernels are downloaded.
-        """
-        
-        self.isKernelsExists = os.path.exists(KERNEL_DIR)
-        if not self.isKernelsExists or dodownload:
-            print("Kernels don't exist, downloading ...")
-            if not os.path.exists(SPICE_DIR):
-                os.mkdir(SPICE_DIR)
-            if not os.path.exists(os.path.join(KERNEL_DIR)):
-                os.mkdir(KERNEL_DIR)
-            self.download_index_file()
-            self.find_kernels()
-            self.download_kernels()
-            self.download_juno_specific_kernels()
-        else:
-            self.find_kernels()
-            
-        self.create_meta_kernel_file()
+    kernel_urls = [
+        'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/fk/juno_v12.tf',
+        'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/lsk/naif0012.tls',
+        'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/pck/pck00010.tpc',
+        'https://naif.jpl.nasa.gov/pub/naif/JUNO/misc/jszalay/juno_phi_o_v1.tf',
+        'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/sclk/JNO_SCLKSCET.00134.tsc',    
+    ]
 
-    def download_index_file(self):
-        """Downloads the spice kernel index file from NAIF."""
-        INDEX_URL = JUNO_SPICE_URL + "index/index.tab"
-        outfile = os.path.join(SPICE_DIR, 'index.tab')
-        
-        download_file(INDEX_URL, outfile)
-        os.rename(
-            os.path.join(SPICE_DIR, 'index.tab'),
-            os.path.join(SPICE_DIR, 'index_spice.csv'))
-        
+    with ftplib.FTP("naif.jpl.nasa.gov") as ftp:
 
-    def find_kernels(self):
-        """Finds the relevant kernels by parsing the index file."""
-        columns = [
-            'START_TIME',
-            'STOP_TIME',
-            'FILE_SPECIFICATION_NAME',
-            'DATASET_ID',
-            'CREATION_TIME',
-            'IDENTIFIER',
-            'RELEASE_TIME',
-            'KERNEL_TYPE',
-            'KERNEL_FILENAME',
-            'VOLUME'
-        ]
+        ftp.login()
+        ftp.cwd('/pub/naif/JUNO/kernels/spk')
 
-        df = pd.read_csv(self.indexfile, names=columns)
+        for fname in ftp.nlst():
+            if not ('.bsp' in fname[-4:]):
+                continue
 
-        for col in ['KERNEL_TYPE', 'KERNEL_FILENAME', 'FILE_SPECIFICATION_NAME']:
-            df[col] = df[col].apply(lambda x: x.strip())
-
-
-        self.kernelsdf = df.loc[df['KERNEL_TYPE'].isin(
-            ['SPK', 'FK', 'LSK', 'PCK', 'SCLK'])]
-
-
-    def download_kernels(self):
-        """Download the relevant kernels from NAIF."""
-        for i, row in self.kernelsdf.iterrows():
-            file_url = os.path.join(
-                JUNO_SPICE_URL,
-                os.path.split(row['FILE_SPECIFICATION_NAME'])[0],
-                row['KERNEL_FILENAME']
-            )
-            outfile = os.path.join(
-                KERNEL_DIR, row['KERNEL_FILENAME'])
-            
-            download_file(file_url, outfile)
-        self.isKernelsExists = True
-        
+            if (fname[0:3] in ['de4', 'jup']) or \
+                ('spk_rec' in fname[0:7]):
+                kernel_urls.append(
+                    'https://naif.jpl.nasa.gov' + \
+                    ftp.pwd() + '/' + fname)
+                
+    if doDownload:
+        print("Downloading SPICE kernels ...")
+        download_multiple_files(
+            kernel_urls, os.path.join(SPICE_DIR, 'kernels'))
     
-    def download_juno_specific_kernels(self):
+    print("Creating Meta Kernel file ...")
+    with open(METAFILE, 'w') as f:
+        f.write("\\begindata\n")
+        f.write("KERNELS_TO_LOAD=(\n")
         
-        for kernel in JUNO_SPECIFIC_KERNELS:
-            outfile = os.path.join(
-                KERNEL_DIR,
-                kernel.split('/')[-1])
+        for kernel in kernel_urls:
+            f.write("'spice/kernels/{:s}',\n".format(kernel.split('/')[-1]))
 
-            download_file(kernel, outfile)
-        
-
-    def create_meta_kernel_file(self):
-        """Create the meta spice kernel file to be used with spiceypy"""
-        with open(METAFILE, 'w') as f:
-            f.write("\\begindata\n")
-            f.write("KERNELS_TO_LOAD=(\n")
-
-
-            for i, kernel in self.kernelsdf.iterrows():
-                filename = os.path.join(KERNEL_DIR, kernel['KERNEL_FILENAME'])
-                f.write("'{:s}',\n".format(filename))
-            
-            for kernel in JUNO_SPECIFIC_KERNELS:
-                f.write("'{:s}',\n".format(
-                    os.path.join(KERNEL_DIR, kernel.split('/')[-1])))
-            f.write(")\n")
-            f.write("\\begintext\n")
+        f.write(")\n")
+        f.write("\\begintext\n")
 
 
 def get_juno_position(times, coordsystem='JUNO_JSS', center='JUPITER'):

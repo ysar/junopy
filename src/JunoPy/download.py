@@ -8,11 +8,14 @@ import glob
 import time
 import urllib.request
 
-def download_file(fileurl, fileoutname):
+def download_file(fileurl, fileoutname, CHUNK=16*1024*16):
     """Opens a URL and downloads it's contents onto disk."""
     with urllib.request.urlopen(fileurl) as g:
         with open(fileoutname, 'wb+') as f:
-            f.write(g.read()) #.decode('UTF-8'))
+            f.write(g.read())
+            
+            # for chunk in iter(lambda: g.read(CHUNK), b''):
+            #     f.write(chunk) #.decode('UTF-8'))
             
 
 def download_multiple_files(urls, outfolder=''):
@@ -66,3 +69,15 @@ def download_multiple_files(urls, outfolder=''):
 
     pool.close()
     pool.join()
+
+
+def download_jade_files(start, end, username=None, password=None):
+    """
+    Method to download files from the LASP JADE server. 
+    """
+    if not username or not password:
+        raise Exception('Need Username/Password.')
+
+    JADE_URL = "http://lasp.colorado.edu/data/jade/Level3/jade_sci_ops/"
+
+    pass

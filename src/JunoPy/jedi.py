@@ -6,9 +6,11 @@ import datetime as dt
 import glob
 import scipy.optimize
 
-from matplotlib import ticker
 import matplotlib.colors as colors
 
+from matplotlib import ticker
+from scipy.constants import c as cspeed
+from scipy.constants import m_e, m_p
 from JunoPy.index import IndexFile
 
 
@@ -22,14 +24,15 @@ class JediData:
     :param str species: Plasma species (Options - 'O\+S', 'OXYGEN', 'SULFUR',
                         'ELECTRON')
     :param str dtbin: String describing the binning frequency (datetime code).
-    :param list(float) efilter: List giving upper and lower ends of electron
-                                energy spectra.
+    :param list(float) efilter: List with upper and lower energy limits in keV.
     """
     nSSD = 6
     pitchangles = np.linspace(0, 170, 18)
+    resampleoffsets = {'T': '15S', '30S':'15S', '15S':'7500ms'}
+    hasPSD = False
     
     def __init__(self, filename=None, start=None, end=None, 
-                 species=None, dtbin='T', efilter=None):
+                 species=None, dtbin='T', efilter=None, units='FLUX'):
         
         
         if not filename:   # Useful for creating empty JediData object.
@@ -39,17 +42,23 @@ class JediData:
         self.species = species   
         self.dtbin = dtbin
         self.efilter = efilter
+        self.units = units
         
-        self.read_csv_file()
+        self.read_raw_csv_file()
         
         if start and end:
             self.df_raw = self.df_raw.loc[start.strftime('%Y-%m-%d %H:%M:%S'):
                                           end.strftime('%Y-%m-%d %H:%M:%S')]
             
-        self.process_data()
+        self.create_energytime_df(units=self.units)
+        self.create_pitchangle_df(units=self.units)
             
-    
-    def read_csv_file(self, dtype='FLUX'):
+
+    def set_pitchangles(self, pa):
+        self.pitchangles = pa
+
+
+    def read_raw_csv_file(self, dtype='FLUX'):
         """
         Internal function to read the JEDI CSV file.
         
@@ -101,22 +110,17 @@ class JediData:
         df = df[~df['particletype'].str.contains('NONPARTICLE')]
         
         df.reset_index(inplace=True)
-        
-        
+
         if self.species == 'ELECTRON':
-            filter_string = df['channels'][0][-7:]    # Filter lowest E channel for e-.
-            df = df[~df['channels'].str.contains(filter_string)]
-            filter_string = df['channels'][1][-7:]    # Filter lowest2 E channel for e-.
-            df = df[~df['channels'].str.contains(filter_string)]
-            filter_string = df['channels'][2][-7:]    # Filter lowest3 E channel for e-.
-            df = df[~df['channels'].str.contains(filter_string)]
-            filter_string = df['channels'][3][-7:]    # Filter lowest4 E channel for e-.
-            df = df[~df['channels'].str.contains(filter_string)]
+            # Filter first 4 energy channels for electrons
+            for i in range(4):
+                filter_string = df['channels'][i][-7:]    
+                df = df[~df['channels'].str.contains(filter_string)]
             
         if self.species == 'PROTON':
             filter_string = df['channels'][0][-7:]    # Filter lowest E channel for H+.
             df = df[~df['channels'].str.contains(filter_string)]
-            
+
         if self.efilter:
             df = df[(df['lowEbins'] >= self.efilter[0]) & (df['highEbins'] <= self.efilter[1])]
             
@@ -125,42 +129,36 @@ class JediData:
             
         if self.species == 'O\+S':
             self.species = 'O & S'
+            m = 16 * m_p
+
         elif self.species == 'OXYGEN':
             self.species = 'O'
+            m = 16 * m_p
+
         elif self.species == 'SULFUR':
             self.species = 'S'
+            m = 32 * m_p
+
         elif self.species == 'PROTON':
             self.species = 'H+'
+            m = m_p * 1.0
+
         else:
             self.species = 'e-'
+            m = m_e * 1.0
+
+        df['p2c2'] = 0.5 * \
+            (df['lowEbins'] * (df['lowEbins'] + 2 * m * cspeed**2) + \
+             df['highEbins'] * (df['highEbins'] + 2 * m * cspeed**2)) * 1e-6
 
         
         self.metadata = df
         
-    
-    def process_data(self, start=None, end=None):
-        """From the raw data, process the data into a cleaner format."""
         
-        # Create pandas dataframe with Energy / time 
-        collect_durations = self.df_raw['Duration'].values
-        
-        if self.dtbin == 'T':
-            self.energytime = self.df_raw[self.metadata['channels']]\
-                .resample('T', offset='30S')\
-                .mean()
-            
-        elif self.dtbin == '30S':
-            self.energytime = self.df_raw[self.metadata['channels']]\
-                .resample('30S', offset='15S')\
-                .mean()
-            
-        elif self.dtbin == '15S':
-            self.energytime = self.df_raw[self.metadata['channels']]\
-                .resample('15S', offset='7500ms')\
-                .mean()
-
-        # Create energy bins manually based on the largest allowable bins based on min and max.
-        
+    def find_clean_energy_bins(self):
+        """
+        Identify non-overlapping energy bins.
+        """
         if len(self.metadata) % self.nSSD != 0:
             raise Exception('Unequal channels among SSDs')
             
@@ -182,22 +180,58 @@ class JediData:
         
         self.n_energybins = n_energybins
         
-        diffE = self.energybins_high - self.energybins_low
-        
-        # Combine flux from different SSDs.
-        
-        array = self.energytime.values
-        
+
+    def resample_df_mean(self, df, columns):
+        return df.loc[:, columns]\
+            .resample(self.dtbin, offset=self.resampleoffsets[self.dtbin])\
+            .mean()
+
+
+    def create_energytime_df(self, units='FLUX'):
+        """
+        Create a cleaner dataset with index as time and columns
+        as energy channels. Each SSD has different energy channels
+        which are combined together to create this dataset.
+        """
+        if 'FLUX' in units:
+            self.energytime = self.resample_df_mean(
+                self.df_raw, self.metadata['channels'])
+        elif 'PSD' in units:
+            if not self.hasPSD:
+                self.calc_phase_space_density()
+
+            self.energytime = self.resample_df_mean(
+                self.psd_raw, self.psd_raw.columns)
+
+        # Create new energy bins without overlap between SSDs.
+        self.find_clean_energy_bins()
+
+        tmparray = self.energytime.values
+
         for i in range(self.n_energybins):
-            self.energytime['Channel{:d}_Flux'.format(i)] = array[:, i::self.n_energybins].mean(axis=1)
+            self.energytime['Channel{:d}_{:s}'.format(i, units)] = \
+                tmparray[:, i::self.n_energybins].mean(axis=1)
             
-        self.energytime.drop(labels=self.metadata['channels'], axis=1, inplace=True)
-        
-        
-        # Create pitch-angle data (flux units)
-        self.pitchangletime = self.df_raw\
-            .loc[:, self.metadata['channels']].copy()
-        
+        for key in self.energytime.keys():
+            if not 'Channel' in key:
+                self.energytime.drop(labels=key, axis=1, inplace=True)
+
+
+    def create_pitchangle_df(self, units='FLUX'):
+        """
+        Create a cleaner dataset with index as time and columns as 
+        pitchangles. Combine data from different energy channels
+        and organize w.r.t. SSDs.
+        """
+        if 'FLUX' in units:
+            self.pitchangletime = self.df_raw\
+                .loc[:, self.metadata['channels']].copy()
+        elif 'PSD' in units:
+            if not self.hasPSD:
+                self.calc_phase_space_density()
+            self.pitchangletime = self.psd_raw.copy()
+
+
         pitchanglecols = self.df_raw\
             .loc[:, [x for x in self.df_raw.columns if 'Pitch_Angle' in x]].copy()
         
@@ -221,31 +255,30 @@ class JediData:
             self.pitchangletime['Intensity_PA_bin_{:d}'.format(j)] /= \
                 self.pitchangletime['nSSDs_PA_bin_{:d}'.format(j)]
         
-            
-        if self.dtbin == 'T':
-            self.pitchangletime = self.pitchangletime\
-                .loc[:, self.pitchangletime.columns.str.contains('Intensity_PA_bin')]\
-                .resample('T', offset='30S')\
-                .mean()
-
-        elif self.dtbin == '30S':
-            self.pitchangletime = self.pitchangletime\
-                .loc[:, self.pitchangletime.columns.str.contains('Intensity_PA_bin')]\
-                .resample('30S', offset='15S')\
-                .mean()
-            
-        elif self.dtbin == '15S':
-            self.pitchangletime = self.pitchangletime\
-                .loc[:, self.pitchangletime.columns.str.contains('Intensity_PA_bin')]\
-                .resample('15S', offset='7500ms')\
-                .mean()
+        self.pitchangletime = self.resample_df_mean(
+            self.pitchangletime, 
+            self.pitchangletime.columns.str.contains('Intensity_PA_bin'))
         
         for key in self.pitchangletime.keys():
             if not 'Intensity_PA_bin' in key:
-                self.pitchangletime.drop(labels=key, axis=1)
+                self.pitchangletime.drop(labels=key, axis=1, inplace=True)
             
-    
         
+    def calc_phase_space_density(self):
+        """
+        Convert from Flux units to phase space density using the formula in 
+        """
+        columns = [x[:-5] + '_PSD' for x in self.metadata.channels]
+
+        self.psd_raw = pd.DataFrame(index=self.df_raw.index, columns=columns)
+
+        for channel in self.metadata['channels']:
+            self.psd_raw[channel[:-5] + '_PSD'] = self.df_raw[channel] / \
+                self.metadata.loc[self.metadata['channels'] == channel, 'p2c2'].values
+
+        self.hasPSD = True        
+
+
     def plot_energy_spectra(self, ax, vmin=None, vmax=None, cmap=None):
         """Energy / time dynamic spectra using pcolormesh."""
         
@@ -295,16 +328,14 @@ class JediData:
         bbox = ax.get_position()
         cax = ax.figure.add_axes([bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
         cbar = ax.figure.colorbar(mp, cax=cax)
-        cbar.set_ticks(ticker.LogLocator(numticks=7, subs='all'))
+        #cbar.set_ticks(ticker.LogLocator(numticks=9, subs='all'))
         
         # cbar.set_label('counts/s/cm$^2$/str/keV', rotation=270, labelpad=25.0, fontsize=9)
-    
-        
         
         return ax
     
     
-    def plot_pitchangle_spectra(self, ax, vmin=None, vmax=None, cmap=None, combine=None):
+    def plot_pitchangle_spectra(self, ax, vmin=None, vmax=None, cmap=None, combine=None, units='FLUX'):
         
         import matplotlib.colors as colors 
         
@@ -351,7 +382,7 @@ class JediData:
         cbar = ax.figure.colorbar(mp, cax=cax)
         # cbar.set_label('counts/s/cm$^2$/str/keV', rotation=270, labelpad=25.0, fontsize=9)
         # cbar.set_label('intensity', rotation=270, labelpad=20.0)
-        cbar.set_ticks(ticker.LogLocator(numticks=7, subs='all'))
+        # cbar.set_ticks(ticker.LogLocator(numticks=9, subs='all'))
     
     
     def plot_flux_timeseries(self, ax, disable_legend=False):
@@ -415,7 +446,8 @@ class JediData:
 #                 df.drop(x, axis=1, inplace=True)
     
         self.spectralindex = df.copy()
-        
+
+
     def plot_energy_spectral_index(self, ax=None):
         
         ax.plot(self.spectralindex.index, self.spectralindex['gamma'], zorder=3)
@@ -441,8 +473,7 @@ class JediData:
                                   self.energytime.index[0].strftime('%Y-%j'),
                                   mode='w')
         
-        
-    
+           
 def merge_two_jedi_data(j1, j2):
     """
     Merges two jeDI data files of same type & species. 
@@ -481,7 +512,6 @@ def merge_two_jedi_data(j1, j2):
     return j3
 
         
-
 def get_jedi_data(start, end, dtbin='T'):
     
     electron_data = check_or_fetch('ERSESP', start, end, 'ELECTRON', dtbin=dtbin)
@@ -506,6 +536,7 @@ def check_or_fetch(sid, start, end, species, dtbin='T', efilter=None):
     
     if not files:
         
+        print('JEDI files not found, downloading ...')
         jediindex.get_files_between_dates(start, end, DoDownload=True, sid=sid)
         
         files = glob.glob('data/jedi/*{:s}_CDR_{:s}_*.TAB'.format(sid, start.strftime('%Y%j')))

@@ -14,7 +14,6 @@ from matplotlib.ticker import AutoMinorLocator
 from scipy.signal import argrelextrema
 
 from JunoPy.library import R_JUPITER
-from JunoPy.spice import InitSpiceKernels, get_juno_position
 
 
 
@@ -51,6 +50,8 @@ class MagData(object):
     
     def count_header_lines(self):
         """Count header lines in the magnetometer file."""
+        
+        i = -1
         with open(self.filename, 'r') as f:
 
             n_start = 0
@@ -64,8 +65,9 @@ class MagData(object):
 
                 if n_end == n_start:
                     break
-
+        
         return i + 1
+
 
 
     def parse_mag_file(self):

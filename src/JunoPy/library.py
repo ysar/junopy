@@ -67,12 +67,11 @@ def find_ticks_between(start, end, nticks=6):
     """
     Given an axes object make the ticks appropriately for subplots.
     """
-    from JunoPy.spice import InitSpiceKernels, get_juno_position
+    from JunoPy.spice import get_juno_position
 
     time_array = pd.date_range(
         start=start, end=end, periods=nticks).to_pydatetime().tolist()
 
-    InitSpiceKernels()
     position, _ = get_juno_position(time_array)
 
 
@@ -101,12 +100,11 @@ def find_ticks_between_GPhiO(start, end, nticks=6):
     """
     Given an axes object make the ticks appropriately for subplots.
     """
-    from JunoPy.spice import InitSpiceKernels, get_juno_position
+    from JunoPy.spice import get_juno_position
 
     time_array = pd.date_range(
         start=start, end=end, periods=nticks).to_pydatetime().tolist()
 
-    InitSpiceKernels()
     position, _ = get_juno_position(time_array,
                                     coordsystem='JUNO_GANYMEDE_PHI_O',
                                     center='503')

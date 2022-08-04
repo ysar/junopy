@@ -10,6 +10,7 @@ directory of the project.
 import os
 import datetime as dt
 import pandas as pd
+import numpy as np
 
 from JunoPy.library import DATASETS, PDS_URL, EXTENSIONS, TIMEFORMAT
 from JunoPy.download import download_file, download_multiple_files
@@ -69,44 +70,64 @@ class IndexFile(object):
         Read in the index file. PDS has conveniently chosen to use comma
         separated values.
         """
-        index = pd.read_csv(self.filename)
+        columns = ['VOLUME_ID', 'SID', 'DATA_SET_ID', 'PRODUCT_ID', 'START_TIME',
+           'STOP_TIME', 'FILE_SPECIFICATION_NAME', 'CR_DATE',
+           'PRODUCT_LABEL_MD5CHECKSUM']
 
-        keys = [c.strip() for c in index.columns]
-        index.columns = keys
-        index[index.columns] = index.apply(lambda x: x.str.strip())
+        dateparse = lambda x: dt.datetime.strptime(x, TIMEFORMAT[self.dataset])
 
-        # --------------------------------------------------------------------
-        # index['START_TIME'] = pd.to_datetime(
-        #     index['START_TIME'], format=TIMEFORMAT[self.dataset])
-        # index['STOP_TIME'] = pd.to_datetime(
-        #     index['STOP_TIME'], format=TIMEFORMAT[self.dataset])
-        # index['CR_DATE'] = pd.to_datetime(
-        #     index['CR_DATE'], format=TIMEFORMAT[self.dataset][:-3])
-
-        # Unfortunately some PDS data has different time format bugs, so the
-        # above vectorized implementation doesnt work well, specifically for
-        # JADE data.
-        # --------------------------------------------------------------------
-        for i, data in index.iterrows():
-
-            try:
-                data['START_TIME'] = pd.to_datetime(
-                    data['START_TIME'], format=TIMEFORMAT[self.dataset])
-            except ValueError:
-                data['START_TIME'] = pd.to_datetime(
-                    data['START_TIME'], format=TIMEFORMAT[self.dataset][:-3])
-
-            try:
-                data['STOP_TIME'] = pd.to_datetime(
-                    data['STOP_TIME'], format=TIMEFORMAT[self.dataset])
-            except ValueError:
-                data['STOP_TIME'] = pd.to_datetime(
-                    data['STOP_TIME'], format=TIMEFORMAT[self.dataset][:-3])
-
-            data['CR_DATE'] = pd.to_datetime(
-                data['CR_DATE'], format=TIMEFORMAT[self.dataset][:-3])
-
+        index = pd.read_csv(
+            self.filename,
+            names=columns, 
+            parse_dates=['START_TIME', 'STOP_TIME'], date_parser=dateparse,
+            skiprows=1)
+        
         self.df = index
+        
+#         index = pd.read_csv(self.filename)
+
+#         keys = [c.strip() for c in index.columns]
+#         index.columns = keys
+#         index[index.columns] = index.apply(lambda x: x.str.strip())
+
+#         # --------------------------------------------------------------------
+#         # index['START_TIME'] = pd.to_datetime(
+#         #     index['START_TIME'], format=TIMEFORMAT[self.dataset])
+#         # index['STOP_TIME'] = pd.to_datetime(
+#         #     index['STOP_TIME'], format=TIMEFORMAT[self.dataset])
+#         # index['CR_DATE'] = pd.to_datetime(
+#         #     index['CR_DATE'], format=TIMEFORMAT[self.dataset][:-3])
+
+#         # Unfortunately some PDS data has different time format bugs, so the
+#         # above vectorized implementation doesnt work well, specifically for
+#         # JADE data.
+#         # --------------------------------------------------------------------
+        
+#         print(index['START_TIME'])
+#         raise Exception()
+        
+#         for i, data in index.iterrows():
+
+#             try:
+#                 data['START_TIME'] = pd.to_datetime(
+#                     data['START_TIME'], format=TIMEFORMAT[self.dataset])
+#             except ValueError:
+#                 data['START_TIME'] = pd.to_datetime(
+#                     data['START_TIME'], format=TIMEFORMAT[self.dataset][:-3])
+
+#             try:
+#                 data['STOP_TIME'] = pd.to_datetime(
+#                     data['STOP_TIME'], format=TIMEFORMAT[self.dataset])
+#             except ValueError:
+#                 data['STOP_TIME'] = pd.to_datetime(
+#                     data['STOP_TIME'], format=TIMEFORMAT[self.dataset][:-3])
+
+#             data['CR_DATE'] = pd.to_datetime(
+#                 data['CR_DATE'], format=TIMEFORMAT[self.dataset][:-3])
+            
+        
+
+#         self.df = index
 
 
     def get_files_between_dates(
@@ -124,34 +145,65 @@ class IndexFile(object):
         
         """
         df = self.df
-        df_masked = df.loc[(df['START_TIME'] > startdate) &
-                           (df['STOP_TIME'] <= enddate)]
-
-        if df_masked.empty:
-            df_masked = df.loc[
-                (df['START_TIME'] < startdate) &
-                (df['STOP_TIME'] >= enddate) &
-                (startdate - df['START_TIME'] < dt.timedelta(hours=24))]
-
-            # print('Date range too short - downloading one file.')
-
-        # print(df_masked)
-
+        df_masked = pd.DataFrame()
+        
         if sid:
-            df_masked = df_masked[df_masked['SID'].str.contains(sid)]
+            df_masked = df[df['SID'].str.contains(sid)]
+        
+        # print(df_masked.info())
+        filelist = []
+  
+        for i, row in df_masked.iterrows():
+            
+            doAppend = False
+            
+            # if (startdate - row['START_TIME'])
+            
+            
+            
+            if (np.abs((startdate - row['START_TIME']).total_seconds()) < \
+                np.abs(dt.timedelta(hours=24).total_seconds())):
+                doAppend = True
+                
+            if (np.abs((enddate - row['STOP_TIME']).total_seconds()) < \
+                np.abs(dt.timedelta(hours=24).total_seconds())):
+                doAppend = True
+                
+            if (row['START_TIME'] > startdate and row['STOP_TIME'] < enddate):
+                doAppend = True
+                
+            if doAppend:
+                filelist.append(row['FILE_SPECIFICATION_NAME'].strip())
+                
 
-        filelist = [x.strip() for x in df_masked['FILE_SPECIFICATION_NAME']]
-        print(filelist)
+        # filelist = [x.strip() for x in df_masked['FILE_SPECIFICATION_NAME']]
+        # print(startdate, enddate, filelist) # filelist)
         
         if DoDownload and len(filelist) > 0:
             urls = []
 
             for f in filelist:
 
-                urls.append(PDS_URL + DATASETS[self.dataset] + '/' + \
-                           f[:-4] + EXTENSIONS[self.dataset])
+                # urls.append(PDS_URL + DATASETS[self.dataset] + '/' + \
+                #            f[:-4] + EXTENSIONS[self.dataset])
+                
+                print('Downloading file - {:s}'.format(f[:-4]))
 
-            download_multiple_files(
-                urls, outfolder=os.path.join('data', self.dataset))
+                downfile = os.path.join(
+                    'data', 
+                    self.dataset, 
+                    f[:-4].split('/')[-1] + EXTENSIONS[self.dataset])
+
+                if not os.path.exists(downfile):
+
+                    download_file(
+                        PDS_URL + DATASETS[self.dataset] + '/' + \
+                        f[:-4] + EXTENSIONS[self.dataset],
+                        downfile)
+
+            # download_multiple_files(
+            #     urls, outfolder=os.path.join('data', self.dataset))
+            
+            
 
         return filelist

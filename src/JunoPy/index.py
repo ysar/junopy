@@ -153,13 +153,9 @@ class IndexFile(object):
         # print(df_masked.info())
         filelist = []
   
-        for i, row in df_masked.iterrows():
+        for _, row in df_masked.iterrows():
             
             doAppend = False
-            
-            # if (startdate - row['START_TIME'])
-            
-            
             
             if (np.abs((startdate - row['START_TIME']).total_seconds()) < \
                 np.abs(dt.timedelta(hours=24).total_seconds())):

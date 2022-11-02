@@ -18,6 +18,9 @@ import os
 import numpy as np
 import datetime as dt
 import pandas as pd
+import JupiterMag
+
+from JunoPy.spice import get_juno_position
 
 R_JUPITER = 71492
 
@@ -67,8 +70,6 @@ def find_ticks_between(start, end, nticks=6):
     """
     Given an axes object make the ticks appropriately for subplots.
     """
-    from JunoPy.spice import get_juno_position
-
     time_array = pd.date_range(
         start=start, end=end, periods=nticks).to_pydatetime().tolist()
 
@@ -100,8 +101,6 @@ def find_ticks_between_GPhiO(start, end, nticks=6):
     """
     Given an axes object make the ticks appropriately for subplots.
     """
-    from JunoPy.spice import get_juno_position
-
     time_array = pd.date_range(
         start=start, end=end, periods=nticks).to_pydatetime().tolist()
 
@@ -125,5 +124,60 @@ def find_ticks_between_GPhiO(start, end, nticks=6):
                 '{:7.2f}'.format(pos[0]) + '\n' +
                 '{:7.2f}'.format(pos[1]) + '\n' +
                 '{:7.2f}'.format(pos[2]))
+
+    return time_array, tickstring
+
+def get_M_shell(x, y, z):
+        """Get the M shell location of Juno using Ray-Tracing."""
+        JupiterMag.Con2020.Config(equation_type='analytic')
+        T_analytic = JupiterMag.TraceField(x, y, z,
+                                IntModel='jrm33', ExtModel='Con2020')
+        
+        trace = T_analytic.TraceDict()
+        Bmag = np.sqrt(trace['Bx'][0]**2 + trace['By'][0]**2 + trace['Bz'][0]**2)
+        rad = np.sqrt(trace['x'][0]**2 + trace['y'][0]**2 + trace['z'][0]**2)
+        lat = np.arctan2(trace['z'][0]**2, np.sqrt(trace['x'][0]**2 + trace['y'][0]**2))
+        lon = np.arctan2(trace['y'][0], trace['x'][0])
+
+        M = rad[np.argmin(Bmag)]
+        lat = lat[np.argmin(Bmag)]
+        lon = lon[np.argmin(Bmag)]
+
+        return M, lat * 180 / np.pi, lon * 180 / np.pi
+
+def find_ticks_between_Mshell(start, end, nticks=6):
+    """
+    Given an axes object make the ticks appropriately for subplots.
+    We would like to have :
+    M shell, Latitude, SIII-Longitude
+    """
+    time_array = pd.date_range(
+        start=start, end=end, periods=nticks).to_pydatetime().tolist()
+
+    position, _ = get_juno_position(time_array, coordsystem='IAU_JUPITER')
+    position_mag, _ = get_juno_position(time_array, coordsystem='JUNO_MAG_VIP4')
+
+    tickstring = []
+    for i, pos in enumerate(position):
+
+        M, _, lon = get_M_shell(pos[0], pos[1], pos[2])
+
+        mlat = np.arctan2(
+            position_mag[i, 2], 
+            np.sqrt(position_mag[i, 0]**2 + position_mag[i, 1]**2)) \
+                * 180 / np.pi
+
+        if i == 0:
+            tickstring.append(
+            'Time   {:s}'.format(time_array[i].strftime('%H:%M:%S')) + '\n' +
+            'M     {:7.2f}'.format(M) + '\n' +
+            'MLat   {:7.2f}'.format(mlat) + '\n' +
+            'Lon   {:7.2f}'.format(lon))
+        else:
+            tickstring.append(
+                time_array[i].strftime('%H:%M:%S') + '\n' +
+                '{:7.2f}'.format(M) + '\n' +
+                '{:7.2f}'.format(mlat) + '\n' +
+                '{:7.2f}'.format(lon))
 
     return time_array, tickstring

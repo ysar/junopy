@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import datetime as dt
+import glob
 import h5py
 import copy
 import itertools
@@ -14,7 +15,7 @@ from matplotlib.ticker import AutoMinorLocator
 from scipy.signal import argrelextrema
 
 from JunoPy.library import R_JUPITER
-
+from JunoPy.spice import spice_load_kernels, spice_unload_kernels
 
 
 class MagData(object):
@@ -39,11 +40,12 @@ class MagData(object):
                 self.parse_mag_file()
         
         if start and end:
-            self.df = self.df.loc[start - dt.timedelta(minutes=5): end + dt.timedelta(minutes=5)].copy()
+            self.df = self.df.loc[start: end].copy()
             
         if not 'JUNO_JSS' in coordsystem:
             self.convert_to_coordsystem(coordsystem)
             
+
     def __repr__(self):
         """String representation for class. Writes the dataframe head"""
         return self.df.head().__repr__()
@@ -67,7 +69,6 @@ class MagData(object):
                     break
         
         return i + 1
-
 
 
     def parse_mag_file(self):
@@ -136,8 +137,8 @@ class MagData(object):
     
     
     def convert_to_coordsystem(self, coordsystem):
-        spice.furnsh("spice/JunoMetaKernel.txt")
-        spice.furnsh("spice/kernels/juno_phi_o_v1.tf")
+
+        spice_load_kernels()
 
         def tmp_func_convert(row, coordsystem=coordsystem):
 
@@ -153,6 +154,9 @@ class MagData(object):
             = t[0], t[1], t[2]
         
         self.convert_to_spherical()
+
+        spice_unload_kernels()
+        
         
 # magdata.df_new.rename(columns={0:'Bx_GPhiO', 1:'By_GPhiO', 2:'Bz_GPhiO', 3:'X_GPhiO', 4:'Y_GPhiO', 5:'Z_GPhiO'}, inplace=True)
         
@@ -264,7 +268,6 @@ class MagData(object):
         return axs
         
             
-
     def plot_electron_cyc_freq(self, ax=None):
         """
         Calculate and plot the electron cyclotron frequency.
@@ -351,16 +354,9 @@ class MagData(object):
 
 def merge_magdata(m1, m2):
     """Merge two magdata files. Usually used for concatenation."""
-    
     m3 = copy.copy(m1)
-    
-    m3.df = pd.concat([m1.df, m2.df])
-    
-#     m3.filename = os.path.join(
-#         os.path.split(m1.filename)[0],
-#         os.path.split(m1.filename)[-1][:-4] + '_' + os.path.split(m2.filename)[-1])
-    
-    
+    m3.df = pd.concat([m1.df, m2.df])    
+    m3.df = m3.df.groupby(m3.df.index).agg(lambda x: np.nanmean(x))
     return m3
 
 
@@ -938,6 +934,24 @@ class AutoPlasmoid(object):
         return times_pos1, times_neg, times_pos2, motions
     
     
-    
 # =========================================================================
+def get_mag_data(start, end, datafolder, coordsystem=None):
 
+    magdata = []
+    for day in pd.date_range(start, end):
+        
+        filename = glob.glob(
+            datafolder + '/*{:s}ss_r*.hdf5'.format(day.strftime('%Y%j')))[0]
+
+        magdata.append(
+            MagData(
+                filename=filename,
+                start=start,
+                end=end,
+                coordsystem=coordsystem))
+
+    result = magdata[0]
+    for i in range(len(magdata) - 1):
+        result = merge_magdata(result, magdata[i + 1])
+
+    return result

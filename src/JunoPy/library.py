@@ -145,7 +145,7 @@ def get_M_shell(x, y, z):
 
         return M, lat * 180 / np.pi, lon * 180 / np.pi
 
-def find_ticks_between_Mshell(start, end, nticks=6):
+def find_ticks_between_Mshell(start, end, nticks=6, timeformat='%H:%M:%S'):
     """
     Given an axes object make the ticks appropriately for subplots.
     We would like to have :
@@ -169,15 +169,64 @@ def find_ticks_between_Mshell(start, end, nticks=6):
 
         if i == 0:
             tickstring.append(
-            'Time   {:s}'.format(time_array[i].strftime('%H:%M:%S')) + '\n' +
+            'Time   {:s}'.format(time_array[i].strftime(timeformat)) + '\n' +
             'M     {:7.2f}'.format(M) + '\n' +
             'MLat   {:7.2f}'.format(mlat) + '\n' +
             'Lon   {:7.2f}'.format(lon))
         else:
             tickstring.append(
-                time_array[i].strftime('%H:%M:%S') + '\n' +
+                time_array[i].strftime(timeformat) + '\n' +
                 '{:7.2f}'.format(M) + '\n' +
                 '{:7.2f}'.format(mlat) + '\n' +
                 '{:7.2f}'.format(lon))
 
     return time_array, tickstring
+
+
+## Charge exchange cross-sections
+def cxcs_Hplus_O(E):
+    """
+    Lindsay and Stebbings (2005)
+    """
+    a1 = 2.91
+    a2 = 0.0886
+    a3 = 50.9
+    a4 = 4.73
+    a5 = -0.862
+    a6 = 0.0306
+    return (a1 - a2 * np.log(E))**2 * (1 - np.exp(-a3 / E))**2 \
+         + (a4 - a5 * np.log(E)) * (1 - np.exp(-a6 / E))**2
+
+def cxcs_Oplus_O(E):
+    """
+    Lindsay and Stebbings (2005)
+    """
+    a1 = 4.07
+    a2 = 0.269
+    a3 = 4125
+    return (a1 - a2 * np.log(E))**2 * (1 - np.exp(-a3 / E))**0.8
+
+def cxcs_Hplus_H2(Ein):
+    """
+    Tabata and Shirai (2000)
+    """
+    a1 = 2.12e2
+    a2 = 1.721
+    a3 = 6.7e-4
+    a4 = 3.239e-1
+    a5 = 4.34e-3
+    a6 = 1.296
+    a7 = 1.42e-1
+    a8 = 9.34
+    a9 = 2.997
+    
+    E = Ein - 2.5e-3
+    ER = 1.361e-2
+    
+    f1 = 1e-16 * a1 * (E / ER)**a2
+    f2 = f1 / (1 + (E / a3)**(a2 + a4))
+    
+    f1_2 = 1e-16 * a5 * (E / ER)**a2
+    f3_2 = f1_2 / (1 + (E / a6)**(a2 + a7) + (E / a8)**(a2 + a9))
+    
+    return (f2 + f3_2) / 1e-16  #E + 2.5e-3, 

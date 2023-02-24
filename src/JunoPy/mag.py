@@ -935,7 +935,7 @@ class AutoPlasmoid(object):
     
     
 # =========================================================================
-def get_mag_data(start, end, datafolder, coordsystem=None):
+def get_mag_data(start, end, datafolder='data/mag/', coordsystem=None):
 
     magdata = []
     for day in pd.date_range(start, end):

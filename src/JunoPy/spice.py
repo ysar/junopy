@@ -12,10 +12,12 @@ import ftplib
 
 from JunoPy.download import download_file, download_multiple_files
 
+
 SPICE_DIR = 'spice'
 KERNEL_DIR = os.path.join(SPICE_DIR, 'kernels')
 JUNO_SPICE_URL = "https://naif.jpl.nasa.gov/pub/naif/pds/data/jno-j_e_ss-spice-6-v1.0/jnosp_1000/"
 METAFILE = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
+
 
 def download_juno_kernels(doDownload=True):
     """Downloads all relevant Juno related SPICE kernels into a directory."""

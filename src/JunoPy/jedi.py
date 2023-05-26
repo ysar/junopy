@@ -12,6 +12,8 @@ from scipy.constants import m_e, m_p, e
 
 from JunoPy.spice import get_juno_position
 from JunoPy.library import cxcs_Hplus_O, cxcs_Hplus_H2
+from JunoPy.library import cxcs_Hplus_Oplus, cxcs_Hplus_Oplusplus
+from JunoPy.library import cxcs_Hplus_Splus, cxcs_Hplus_Splusplus
 
 
 class JediData:
@@ -31,6 +33,7 @@ class JediData:
     hasValidData = False
     hasCXrate = False
     nChannels = -1
+    hasEflux = False
 
     def __init__(self, **kwargs):
 
@@ -49,8 +52,11 @@ class JediData:
         self.end      = kwargs.pop('end', None)
         self.nEQPAbins = kwargs.pop('nEQPAbins', 9)
         self.dosaveonly = kwargs.pop('dosaveonly', False)
-        self.docalcCX = kwargs.pop('docalcCX', False)
-        self.cxtype = kwargs.pop('cxtype', 'Hplus-O')
+        self.docalcCX   = kwargs.pop('docalcCX', False)
+        self.cxtype    = kwargs.pop('cxtype', 'Hplus-O')
+        self.calcEflux = kwargs.pop('calcEflux', False)
+        self.Eflux_pa1 = kwargs.pop('Eflux_pa1', 0)
+        self.Eflux_pa2 = kwargs.pop('Eflux_pa2', 15)
 
         if self.species == 'PROTON_TOFxPH':
             self.species = 'PROTON'
@@ -86,6 +92,10 @@ class JediData:
 
         if self.docalcCX:
             self.calc_cx_rate()
+
+        if self.calcEflux:
+            self.calc_energy_flux(
+                pa1=self.Eflux_pa1, pa2=self.Eflux_pa2)
 
         self.resample()
 
@@ -286,14 +296,17 @@ class JediData:
             meta['dE'] = np.minimum(meta['Ehigh'], self.energybins[j + 1]) - \
                          np.maximum(meta['Elow'],  self.energybins[j])
 
-            meta.loc[meta['dE'] < 0, 'dE'] = 0.
+
+            meta = meta[~(meta['dE'] < 0)]
+
+            # meta.loc[meta['dE'] < 0, 'dE'] = 0.
 
             # Identify all energy channels within this range.
-            meta = meta[~((meta['Ehigh'] < self.energybins[j]) & 
-                          (meta['Elow'] < self.energybins[j]))]
+            # meta = meta[~((meta['Ehigh'] < self.energybins[j]) & 
+            #               (meta['Elow'] < self.energybins[j]))]
 
-            meta = meta[~((meta['Ehigh'] > self.energybins[j + 1]) & 
-                          (meta['Elow']  > self.energybins[j + 1]))]
+            # meta = meta[~((meta['Ehigh'] > self.energybins[j + 1]) & 
+            #               (meta['Elow']  > self.energybins[j + 1]))]
 
             # Now we know the energy channels that are present within the j-th 
             # energy bin. Knowing this, we can identify the pitch
@@ -320,8 +333,8 @@ class JediData:
 
                 # deltaSigma[intensities == 0] = 0
 
-                val += intensities * row['dE'] * deltaSigma  
-                denom += row['dE'] * deltaSigma
+                val += intensities * row['dE'] # * deltaSigma  
+                denom += row['dE'] # * deltaSigma
                 
                 # How to handle nans?
 
@@ -462,27 +475,33 @@ class JediData:
         """
         self.energytime = self.energytime\
             .resample(self.dtbin, offset=self.dtbin/2)\
-            .agg(lambda x: np.nanmean(x))
+            .agg(np.nanmean)
 
         self.pitchangletime = self.pitchangletime\
             .resample(self.dtbin, offset=self.dtbin/2)\
-            .agg(lambda x: np.nanmean(x))
+            .agg(np.nanmean)
         
         if self.dbfile:
             self.eqpad = self.eqpad\
                 .resample(self.dtbin, offset=self.dtbin/2)\
-                .agg(lambda x: np.nanmean(x))
+                .agg(np.nanmean)
 
         if self.hasCXrate:
             self.cxrate = self.cxrate\
-                .resample(dt.timedelta(seconds=30), offset=dt.timedelta(seconds=15))\
-                .agg(lambda x: np.nansum(x))\
                 .resample(self.dtbin, offset=self.dtbin/2)\
-                .agg(lambda x: np.nanmean(x))
+                .agg(np.nanmean)
 
-                # We sum the CX rate as it is related to the intensity. 
-                # To be precise, we should use an appropriate value of dtbin
-                # to be the whole distribution.
+                # .resample(dt.timedelta(seconds=30), offset=dt.timedelta(seconds=15))\
+                # .agg(np.nansum)\
+                
+                # We assume that every JEDI measurement measures the full-sky
+                # distribution. Unlike JADE, JEDI-90 and 270 sample the full-sky
+                # provided the magnetic field is in the spin plane. 
+
+        if self.hasEflux:
+            self.energyflux = self.energyflux\
+                .resample(self.dtbin, offset=self.dtbin/2)\
+                .agg(np.nanmean)
 
 
     def calc_cx_rate(self):
@@ -504,6 +523,14 @@ class JediData:
             cxcs = cxcs_Hplus_O
         elif self.cxtype == 'Hplus-H2':
             cxcs = cxcs_Hplus_H2
+        elif self.cxtype == 'Hplus-Oplus':
+            cxcs = cxcs_Hplus_Oplus
+        elif self.cxtype == 'Hplus-Oplusplus':
+            cxcs = cxcs_Hplus_Oplusplus
+        elif self.cxtype == 'Hplus-Splus':
+            cxcs = cxcs_Hplus_Splus
+        elif self.cxtype == 'Hplus-Splusplus':
+            cxcs = cxcs_Hplus_Splusplus
 
         for j in range(self.nEbins):
             # For each energy bin, calculate Flux
@@ -514,16 +541,14 @@ class JediData:
             meta['dE'] = np.minimum(meta['Ehigh'], self.energybins[j + 1]) - \
                          np.maximum(meta['Elow'],  self.energybins[j])
 
-            meta = meta[~((meta['Ehigh'] < self.energybins[j]) & 
-                          (meta['Elow'] < self.energybins[j]))]
-
-            meta = meta[~((meta['Ehigh'] > self.energybins[j + 1]) & 
-                          (meta['Elow']  > self.energybins[j + 1]))]
+            meta = meta[~(meta['dE'] < 0)]
 
             # Now we know the energy channels that are present within the j-th 
             # energy bin. Knowing this, we can identify the equatorial pitch
             # angle associated with each energy channel.
             
+            dEsum = np.zeros(len(self.df_raw.index))
+
             for _, row in meta.iterrows():
                 
                 scope = row['channel'][:2]    # Get telescope ID for E channel
@@ -536,9 +561,12 @@ class JediData:
                 deltaSigma = 4 * np.pi * np.sin(eqpa * np.pi / 180) \
                              * np.sin(13.35 * np.pi / 180)
 
-                # Need to ignore NaN values while summing.
+                # Need to ignore NaN values while summing 
+                # (that is done automatically)
+                dEsum[~np.isnan(deltaSigma)] += row['dE']
                 deltaSigma[np.isnan(deltaSigma)] = 0
-                intensities = self.df_raw.loc[:, row['channel']].fillna(0)
+                
+                intensities = self.df_raw.loc[:, row['channel']] # .fillna(0)
 
                 # deltaFlux = Intensity * deltaSolidAngle 
                 Eeff = np.sqrt(row['Ehigh'] * row['Elow'])
@@ -546,17 +574,16 @@ class JediData:
                     cxcs(Eeff) * 1e-16 * row['deltaE'] * row['dE'] * 2 
                     # Multiply by 2 to account for full-sky
 
-            cxrate['Ebin_{:d}'.format(j)] /= meta['dE'].sum()
+            cxrate['Ebin_{:d}'.format(j)] /= dEsum # meta['dE'].sum()
 
         cxrate.replace(0, np.NaN, inplace=True)
         self.cxrate = cxrate
         self.hasCXrate = True
 
 
-
     def plot_spectra(
         self, ax, data='Energy', donorm=False,
-        vmin=None, vmax=None, cmap=None, logplot=True):
+        vmin=None, vmax=None, cmap=None, logplot=True, label=None):
         """
         Generic method to plot a timeseries spectra.
         """
@@ -607,6 +634,9 @@ class JediData:
             [bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
         cbar = ax.figure.colorbar(mp, cax=cax)
 
+        if label:
+            ax.text(0.1, 1.05, label, transform=ax.transAxes)
+
         return ax
     
     
@@ -621,6 +651,47 @@ class JediData:
         return (count * (self.eqpad.index[1] - self.eqpad.index[0])).total_seconds()
 
     
+    def calc_energy_flux(self, pa1=0, pa2=15):
+        """
+        Calculate the upward/downward energy flux based on the formula given
+        in Mauk et al. (2014).
+        pa1, pa2 are in degrees.
+        """
+        
+        self.energyflux = pd.Series(index=self.df_raw.index, data=0.)
+
+        for j in range(self.nSSD):
+            
+            condition = (
+                (self.df_raw['Pitch_Angle_T{:d}'.format(j)] >= pa1) & 
+                (self.df_raw['Pitch_Angle_T{:d}'.format(j)] <= pa2)
+            )   
+
+            channels = self.metadata['channel'].str.contains('T{:d}'.format(j))
+            datacols = self.metadata.loc[channels, 'channel']
+            
+            deltaE = self.metadata.loc[channels, 'Ehigh'] - \
+                     self.metadata.loc[channels, 'Elow']
+
+            midE = np.sqrt(
+                self.metadata.loc[channels, 'Ehigh'] * \
+                self.metadata.loc[channels, 'Elow']
+            )
+            
+            for i, col in enumerate(datacols):
+
+                val = self.df_raw.loc[:, col].values
+                val[~condition] = 0. 
+
+                self.energyflux += val \
+                    * deltaE.iloc[i] * midE.iloc[i] \
+                    * np.pi * e * 1e10     # Unit conversion and 
+                                           # "Area-projected weighted size" ? 
+
+        self.energyflux[self.energyflux == 0] = np.NaN 
+        self.hasEflux = True
+
+
     
 def merge_two_timeseries(df1, df2):
     df = pd.concat([df1, df2])
@@ -666,6 +737,11 @@ def jedi_merge(j1, j2):
 
     if j1.hasCXrate and j2.hasCXrate:
         j3.cxrate = merge_two_timeseries(j1.cxrate, j2.cxrate)
+        j3.hasCXrate = True
+
+    if j1.hasEflux and j2.hasEflux:
+        j3.energyflux = merge_two_timeseries(j1.energyflux, j2.energyflux)
+        j3.hasEflux = True
 
     return j3
 
@@ -688,6 +764,8 @@ def get_jedi_data(**kwargs):
         idstring = 'NONPTOFXER'
 
     datafolder = kwargs.pop('datafolder', 'data/jedi/')
+    sensor = kwargs.pop('sensor', [])
+
     AllData = []
 
     for day in pd.date_range(kwargs['start'], kwargs['end']):
@@ -695,6 +773,13 @@ def get_jedi_data(**kwargs):
         dataFiles = glob.glob(
             datafolder + \
             '/*{:s}_CDR_{:s}_*.hdf5'.format(idstring, day.strftime('%Y%j')))
+
+        if 'JEDI-90' in sensor:
+            dataFiles = [x for x in dataFiles if 'JED_090' in x]
+        if 'JEDI-270' in sensor:
+            dataFiles = [x for x in dataFiles if 'JED_270' in x]
+        if 'JEDI-180' in sensor:
+            dataFiles = [x for x in dataFiles if 'JED_180' in x]
 
         print(dataFiles)
         hrsfiles = [x for x in dataFiles if 'HI' in x or 'NONP' in x]

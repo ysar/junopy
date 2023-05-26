@@ -15,7 +15,8 @@ from matplotlib.ticker import AutoMinorLocator
 from scipy.signal import argrelextrema
 
 from JunoPy.library import R_JUPITER
-from JunoPy.spice import spice_load_kernels, spice_unload_kernels
+from JunoPy.spice import withspiceloaded
+from JunoPy.spice import get_juno_position
 
 
 class MagData(object):
@@ -24,9 +25,10 @@ class MagData(object):
         "year", "DOY", "hour", "minute", "second", "msec", "DecD",
         "Bx", "By", "Bz", "Brange", "X", "Y", "Z"
     ]
+    coordsystem = 'JUNO_JSS'
 
     def __init__(self, filename=None, ishdf=True, start=None, end=None, 
-                 coordsystem='JUNO_JSS'):
+                 coordsystem=None):
         """
         Class to parse magnetometer data files. Stores data into a pandas
         dataframe.
@@ -41,14 +43,18 @@ class MagData(object):
         
         if start and end:
             self.df = self.df.loc[start: end].copy()
-            
-        if not 'JUNO_JSS' in coordsystem:
-            self.convert_to_coordsystem(coordsystem)
+
+        if coordsystem:
+            if not self.df.empty:
+                self.convert_to_coordsystem(outCoord=coordsystem)
+            else:
+                self.coordsystem = coordsystem
             
 
     def __repr__(self):
         """String representation for class. Writes the dataframe head"""
         return self.df.head().__repr__()
+    
     
     def count_header_lines(self):
         """Count header lines in the magnetometer file."""
@@ -104,24 +110,33 @@ class MagData(object):
             self.df['Bx']**2 + self.df['By']**2 + self.df['Bz']**2)
 
 
-    def convert_to_spherical(self):
+    def convert_to_spherical(self, usemagcoords=True):
         """
         Calculate magnetic field values in spherical coordinates based
         on the XYZ location.
         """
         # Calculate R and LT for axes
-        self.df['R'] = np.sqrt(
-            self.df['X']**2 + self.df['Y']**2 + self.df['Z']**2)
+        if usemagcoords:
+            x = self.df['X']
+            y = self.df['Y']
+            z = self.df['Z']
+        else:
+            pos, _ = get_juno_position(
+                self.df.index, coordsystem=self.coordsystem)
+            
+            x = pos[:, 0] * 71492
+            y = pos[:, 1] * 71492
+            z = pos[:, 2] * 71492
 
-        self.df['LT'] = 6 / 90 * \
-            np.arctan2(self.df['Y'], self.df['X']) * 180 / np.pi + 12
+        
+        self.df['R'] = np.sqrt(x**2 + y**2 + z**2)
+
+        self.df['LT'] = 6 / 90 * np.arctan2(y, x) * 180 / np.pi + 12
 
         self.df['Latitude'] = np.arctan2(
-            self.df['Z'],
-            np.sqrt(self.df['X']**2 + self.df['Y']**2)
-            ) * 180 / np.pi
+            z, np.sqrt(x**2 + y**2)) * 180 / np.pi
 
-        phi = np.arctan2(self.df['Y'], self.df['X'])
+        phi = np.arctan2(y, x)
         theta = np.pi / 2 - self.df['Latitude'] * np.pi / 180
 
         self.df['Br'] = np.sin(theta) * np.cos(phi) * self.df['Bx'] + \
@@ -134,32 +149,42 @@ class MagData(object):
 
         self.df['Bphi'] = - np.sin(phi) * self.df['Bx'] + \
             np.cos(phi) * self.df['By']
-    
-    
-    def convert_to_coordsystem(self, coordsystem):
 
-        spice_load_kernels()
+    @withspiceloaded()
+    def convert_to_coordsystem(self, outCoord='JUNO_JSS', usemagcoords=True):
 
-        def tmp_func_convert(row, coordsystem=coordsystem):
+        # spice_load_kernels()
+
+        def tmp_func_convert(row, outCoord=outCoord):
 
             time = spice.str2et(row.name.strftime('%Y-%m-%d %H:%M:%S'))
-            R = spice.pxform('JUNO_JSS', coordsystem, time) #'GPHIO_CORRECTED'
+            R = spice.pxform(self.coordsystem, outCoord, time)
             B = np.array([row['Bx'], row['By'], row['Bz']])
+            X = np.array([row['X'], row['Y'], row['Z']])
 
-            B_new = np.matmul(R, B)  #R1
-            return B_new[0], B_new[1], B_new[2]
+            X_new = np.matmul(R, X)
+            B_new = np.matmul(R, B)
+
+            return B_new[0], B_new[1], B_new[2], X_new[0], X_new[1], X_new[2]
         
         t = self.df.apply(tmp_func_convert, axis=1, result_type='expand')
-        self.df['Bx'], self.df['By'], self.df['Bz'] \
-            = t[0], t[1], t[2]
-        
-        self.convert_to_spherical()
 
-        spice_unload_kernels()
+        try:
+            self.df['Bx'], self.df['By'], self.df['Bz'], \
+                self.df['X'], self.df['Y'], self.df['Z'] \
+                = t[0], t[1], t[2], t[3], t[4], t[5]
+            
+        except KeyError:
+            print(t)
+            print(self.filename)
+            raise Exception()
         
+        self.coordsystem = outCoord
+        self.convert_to_spherical(usemagcoords=usemagcoords)
+
+        # spice_unload_kernels()
         
-# magdata.df_new.rename(columns={0:'Bx_GPhiO', 1:'By_GPhiO', 2:'Bz_GPhiO', 3:'X_GPhiO', 4:'Y_GPhiO', 5:'Z_GPhiO'}, inplace=True)
-        
+    
     def calculate_bendback(self):
         """
         Calculate bendback angle alpha.
@@ -211,6 +236,7 @@ class MagData(object):
 
         return axs
     
+
     def plot_between(self, start, end, **kwargs):
         """
         Plot magnetometer data. Returns an axes object.
@@ -249,10 +275,11 @@ class MagData(object):
         
         vars = kwargs.get('vars')
         axs = kwargs.get('axs')
-        xlim = kwargs.get('xlim')
         
         if start and end:
             df = self.df.loc[start:end].copy()
+        else:
+            df = self.df.copy()
             
         for i, ax in enumerate(axs):
             
@@ -357,6 +384,7 @@ def merge_magdata(m1, m2):
     m3 = copy.copy(m1)
     m3.df = pd.concat([m1.df, m2.df])    
     m3.df = m3.df.groupby(m3.df.index).agg(lambda x: np.nanmean(x))
+    # print(m1.coordsystem)
     return m3
 
 
@@ -935,20 +963,30 @@ class AutoPlasmoid(object):
     
     
 # =========================================================================
-def get_mag_data(start, end, datafolder='data/mag/', coordsystem=None):
+def get_mag_data(start, end, 
+                 datafolder='data/mag/', coordsystem=None):
+
 
     magdata = []
     for day in pd.date_range(start, end):
         
-        filename = glob.glob(
-            datafolder + '/*{:s}ss_r*.hdf5'.format(day.strftime('%Y%j')))[0]
-
-        magdata.append(
-            MagData(
-                filename=filename,
+        files = glob.glob(
+            datafolder + '/*{:s}ss*.hdf5'.format(day.strftime('%Y%j')))
+        print(files)
+        mdata = []
+        for f in files:
+            mdata.append(
+                MagData(
+                filename=f,
                 start=start,
                 end=end,
                 coordsystem=coordsystem))
+
+        dayresult = mdata[0]
+        for i in range(len(mdata) - 1):
+            dayresult = merge_magdata(dayresult, mdata[i + 1])
+
+        magdata.append(dayresult)
 
     result = magdata[0]
     for i in range(len(magdata) - 1):

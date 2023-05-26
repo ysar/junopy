@@ -19,8 +19,10 @@ import numpy as np
 import datetime as dt
 import pandas as pd
 import JupiterMag
+import spiceypy as spice
 
-from JunoPy.spice import get_juno_position
+from JunoPy.spice import get_juno_position, withspiceloaded
+
 
 R_JUPITER = 71492
 
@@ -45,7 +47,7 @@ EXTENSIONS = {
 TIMEFORMAT = {
     'mag': '%Y-%jT%H:%M:%S.%f',
     'waves-burst': '%Y-%m-%dT%H:%M:%S.%f',
-    'waves-survey': '%Y-%m-%dT%H:%M:%S.%f',
+    'waves-survey': 'ISO8601',
     'jedi': '%Y-%jT%H:%M:%S.%f',
     'jade': '%Y-%jT%H:%M:%S.%f'
 }
@@ -127,6 +129,7 @@ def find_ticks_between_GPhiO(start, end, nticks=6):
 
     return time_array, tickstring
 
+
 def get_M_shell(x, y, z):
         """Get the M shell location of Juno using Ray-Tracing."""
         JupiterMag.Con2020.Config(equation_type='analytic')
@@ -144,6 +147,69 @@ def get_M_shell(x, y, z):
         lon = lon[np.argmin(Bmag)]
 
         return M, lat * 180 / np.pi, lon * 180 / np.pi
+
+
+def calc_deltaAlfvenJuno(times, satellite='IO'):
+    """
+    Use the magnetic field model to calculate the longitudinal separation
+    between Juno's mapped location on Io's orbital plane and Io.
+    This is incorrect as it does not account for the propagation time between
+    Juno and Io.
+    """
+    posJuno, _ = get_juno_position(times, coordsystem='IAU_JUPITER')
+
+    deltaAlfven = np.zeros(len(times))
+    print(posJuno.shape)
+    print(posJuno)
+    with withspiceloaded() as context:
+        for i, pos in enumerate(posJuno):
+            print(pos)
+            # Trace field in IAU_JUPITER
+            JupiterMag.Con2020.Config(equation_type='analytic')
+            T_analytic = JupiterMag.TraceField(pos[0], pos[1], pos[2],
+                                    IntModel='jrm33', ExtModel='Con2020')
+            trace = T_analytic.TraceDict()
+            fieldtrace = np.array(
+                [trace['x'][0], trace['y'][0], trace['z'][0]])
+
+            print('Fieldtrace shape - ', fieldtrace.shape)
+
+            # Find rotation matrix to PHI-O system
+            print(times[i].strftime('%Y-%m-%dT%H:%M:%S'))
+            time = spice.str2et(times[i].strftime('%Y-%m-%dT%H:%M:%S'))
+    
+            R = spice.pxform(
+                'IAU_JUPITER', 'JUNO_{:s}_PHI_O'.format(satellite), time)
+            print('R shape - ', R.shape)
+
+            # Convert fieldline position array to PHI-O
+            fieldtracePhiO = np.matmul(R, fieldtrace).T
+
+            izero = np.where(np.diff(np.signbit(fieldtracePhiO[:, 2])))[0]
+
+            rEqJuno = 0.5 * (fieldtrace[:, izero] + fieldtrace[:, izero + 1])
+            posSat, _ = spice.spkpos(
+                satellite, time, 'IAU_JUPITER', 'NONE', 'JUPITER')
+            
+            posSat = np.asarray(posSat) / 71492
+
+
+            print('posSat', posSat)
+            print('rEqJuno', rEqJuno)
+            
+            deltaAlfven[i] = np.arccos(np.dot(rEqJuno.T, posSat)\
+                / np.sqrt(np.sum(rEqJuno**2))\
+                / np.sqrt(np.sum(posSat**2))) * 180 / np.pi
+            
+            xJunoPhiO = 0.5 * (
+                fieldtracePhiO[izero, 0] + fieldtracePhiO[izero + 1, 0])
+            
+            if xJunoPhiO < 0: # Wake
+                deltaAlfven[i] = 180 - deltaAlfven[i]
+
+    return deltaAlfven
+
+
 
 def find_ticks_between_Mshell(start, end, nticks=6, timeformat='%H:%M:%S'):
     """
@@ -183,6 +249,48 @@ def find_ticks_between_Mshell(start, end, nticks=6, timeformat='%H:%M:%S'):
     return time_array, tickstring
 
 
+def find_ticks_between_deltaAlfven(
+        start, end, satellite='IO', nticks=6, timeformat='%H:%M:%S'):
+    """
+    Given an axes object make the ticks appropriately for subplots.
+    We would like to have :
+    M shell, Latitude, SIII-Longitude
+    """
+    time_array = pd.date_range(
+        start=start, end=end, periods=nticks).to_pydatetime().tolist()
+
+    position, _ = get_juno_position(time_array, coordsystem='IAU_JUPITER')
+    position_mag, _ = get_juno_position(time_array, coordsystem='JUNO_MAG_VIP4')
+
+    dAlfven = calc_deltaAlfvenJuno(time_array, satellite=satellite)
+
+    tickstring = []
+    for i, pos in enumerate(position):
+
+        M, _, _ = get_M_shell(pos[0], pos[1], pos[2])
+
+        mlat = np.arctan2(
+            position_mag[i, 2], 
+            np.sqrt(position_mag[i, 0]**2 + position_mag[i, 1]**2)) \
+                * 180 / np.pi
+
+        if i == 0:
+            tickstring.append(
+            'Time   {:s}'.format(time_array[i].strftime(timeformat)) + '\n' +
+            'M     {:7.2f}'.format(M) + '\n' +
+            'MLat   {:7.2f}'.format(mlat) + '\n' +
+            '$\Delta\lambda$   {:7.2f}'.format(dAlfven[i]))
+        else:
+            tickstring.append(
+                time_array[i].strftime(timeformat) + '\n' +
+                '{:7.2f}'.format(M) + '\n' +
+                '{:7.2f}'.format(mlat) + '\n' +
+                '{:7.2f}'.format(dAlfven[i]))
+
+    return time_array, tickstring
+
+
+
 ## Charge exchange cross-sections
 def cxcs_Hplus_O(E):
     """
@@ -197,6 +305,7 @@ def cxcs_Hplus_O(E):
     return (a1 - a2 * np.log(E))**2 * (1 - np.exp(-a3 / E))**2 \
          + (a4 - a5 * np.log(E)) * (1 - np.exp(-a6 / E))**2
 
+
 def cxcs_Oplus_O(E):
     """
     Lindsay and Stebbings (2005)
@@ -205,6 +314,7 @@ def cxcs_Oplus_O(E):
     a2 = 0.269
     a3 = 4125
     return (a1 - a2 * np.log(E))**2 * (1 - np.exp(-a3 / E))**0.8
+
 
 def cxcs_Hplus_H2(Ein):
     """
@@ -230,3 +340,19 @@ def cxcs_Hplus_H2(Ein):
     f3_2 = f1_2 / (1 + (E / a6)**(a2 + a7) + (E / a8)**(a2 + a9))
     
     return (f2 + f3_2) / 1e-16  #E + 2.5e-3, 
+
+
+def cxcs_Hplus_Oplus(E):
+    return 6e-18 / 1e-16
+
+
+def cxcs_Hplus_Oplusplus(E):
+    return 1e-18 / 1e-16
+
+
+def cxcs_Hplus_Splus(E):
+    return 4e-18 / 1e-16
+
+
+def cxcs_Hplus_Splusplus(E):
+    return 6e-18 / 1e-16

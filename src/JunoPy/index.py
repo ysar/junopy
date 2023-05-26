@@ -74,64 +74,26 @@ class IndexFile(object):
            'STOP_TIME', 'FILE_SPECIFICATION_NAME', 'CR_DATE',
            'PRODUCT_LABEL_MD5CHECKSUM']
 
-        dateparse = lambda x: dt.datetime.strptime(x, TIMEFORMAT[self.dataset])
+        # if self.dataset == 'waves-survey':
+        #     dateparse = pd.api.extensions.no_default
+        # else:
+        #     dateparse = lambda x: dt.datetime.strptime(x, )
 
         index = pd.read_csv(
             self.filename,
             names=columns, 
-            parse_dates=['START_TIME', 'STOP_TIME'], date_parser=dateparse,
+            parse_dates=['START_TIME', 'STOP_TIME'], 
+            date_format=TIMEFORMAT[self.dataset],
             skiprows=1)
         
+        index['START_TIME'] = pd.to_datetime(index['START_TIME'])
+        index['STOP_TIME'] = pd.to_datetime(index['STOP_TIME'])
+
         self.df = index
-        
-#         index = pd.read_csv(self.filename)
-
-#         keys = [c.strip() for c in index.columns]
-#         index.columns = keys
-#         index[index.columns] = index.apply(lambda x: x.str.strip())
-
-#         # --------------------------------------------------------------------
-#         # index['START_TIME'] = pd.to_datetime(
-#         #     index['START_TIME'], format=TIMEFORMAT[self.dataset])
-#         # index['STOP_TIME'] = pd.to_datetime(
-#         #     index['STOP_TIME'], format=TIMEFORMAT[self.dataset])
-#         # index['CR_DATE'] = pd.to_datetime(
-#         #     index['CR_DATE'], format=TIMEFORMAT[self.dataset][:-3])
-
-#         # Unfortunately some PDS data has different time format bugs, so the
-#         # above vectorized implementation doesnt work well, specifically for
-#         # JADE data.
-#         # --------------------------------------------------------------------
-        
-#         print(index['START_TIME'])
-#         raise Exception()
-        
-#         for i, data in index.iterrows():
-
-#             try:
-#                 data['START_TIME'] = pd.to_datetime(
-#                     data['START_TIME'], format=TIMEFORMAT[self.dataset])
-#             except ValueError:
-#                 data['START_TIME'] = pd.to_datetime(
-#                     data['START_TIME'], format=TIMEFORMAT[self.dataset][:-3])
-
-#             try:
-#                 data['STOP_TIME'] = pd.to_datetime(
-#                     data['STOP_TIME'], format=TIMEFORMAT[self.dataset])
-#             except ValueError:
-#                 data['STOP_TIME'] = pd.to_datetime(
-#                     data['STOP_TIME'], format=TIMEFORMAT[self.dataset][:-3])
-
-#             data['CR_DATE'] = pd.to_datetime(
-#                 data['CR_DATE'], format=TIMEFORMAT[self.dataset][:-3])
-            
-        
-
-#         self.df = index
 
 
     def get_files_between_dates(
-        self, startdate, enddate, sid='', DoDownload=False):
+        self, startdate, enddate, sid='', DoDownload=False, outfolder=None):
         """
         Given two dates, find all index files corresponding to time between.
         
@@ -150,6 +112,15 @@ class IndexFile(object):
         if sid:
             df_masked = df[df['SID'].str.contains(sid)]
         
+        if not outfolder:
+            outfolder = os.path.join('data', self.dataset)
+
+        # Ignore unwanted files from waves
+        if self.dataset == 'waves-survey':
+            for s in ['BINT', 'BUNC', 'EINT', 'EUNC']:
+                df_masked = df_masked[
+                    ~df_masked['PRODUCT_ID'].str.contains(s)]
+
         # print(df_masked.info())
         filelist = []
   
@@ -185,9 +156,9 @@ class IndexFile(object):
                 
                 print('Downloading file - {:s}'.format(f[:-4]))
 
+                
                 downfile = os.path.join(
-                    'data', 
-                    self.dataset, 
+                    outfolder, 
                     f[:-4].split('/')[-1] + EXTENSIONS[self.dataset])
 
                 if not os.path.exists(downfile):

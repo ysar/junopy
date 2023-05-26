@@ -29,8 +29,8 @@ class WavesData(object):
             self.find_cutoff()
             
         if len(flimits) > 0:
-            self.channels = self.channels[(self.channels['freq'] >= flimit[0]) & 
-                                          (self.channels['freq'] <= flimit[1])]
+            self.channels = self.channels[(self.channels['freq'] >= flimits[0]) & 
+                                          (self.channels['freq'] <= flimits[1])]
 
     def parse_waves_file(self):
         """
@@ -45,11 +45,11 @@ class WavesData(object):
         with open(self.filename, 'r') as f:
 
             if 'Magnetic Field' in f.readline():
-                self.yvar = 'B-Field Spectra\nFreq'
+                self.yvar = 'B\nFreq'
                 self.units  = ' (Hz)'
                 self.cbarlabel = 'nT$^2$/Hz'
             else:
-                self.yvar = 'E-Field Spectra\nFreq'
+                self.yvar = 'E\nFreq'
                 self.units = ' (Hz)'
                 self.cbarlabel = '(V/m)$^2$/Hz'
 
@@ -141,7 +141,7 @@ class WavesData(object):
         Plot Waves-Survey Spectra  (Freq vs time).
         """
 
-        self.channels = self.channels[(self.channels['freq'] <= fhigh) & \
+        channels = self.channels[(self.channels['freq'] <= fhigh) & \
                                       (self.channels['freq'] > flow)]
             
         
@@ -155,14 +155,14 @@ class WavesData(object):
         # Create low and high freq bins.
         ybins = []
         
-        for freq, bw in zip(self.channels['freq'], self.channels['bandwidth']):
+        for freq, bw in zip(channels['freq'], channels['bandwidth']):
             ybins.extend([freq - bw, freq + bw])
             
         ybins = np.asarray(ybins)
         
         # Create cdata 
         
-        cdata = self.df[self.channels['names']].values.T
+        cdata = self.df[channels['names']].values.T
         
         c = np.zeros((len(ybins) - 1, len(timearray) - 1))
         c[:, :] = np.NaN
@@ -198,6 +198,11 @@ class WavesData(object):
         
         if cbarlabel:
             cbar.set_label(cbarlabel, rotation=270, labelpad=10.0)
+
+        label = kwargs.pop('label', None)
+        if label:
+            ax.text(0.1, 1.05, label, transform=ax.transAxes)
+
         # bar.set_ticks(ticker.LogLocator(base=10, numticks=3, subs='all'))
 
         return ax
@@ -252,38 +257,43 @@ class WavesDataDas(object):
         ax.set_yscale('log')
         ax.set_ylabel('Freq (Hz)')
 
+        label = kwargs.pop('label', None)
+        if label:
+            ax.text(0.1, 1.05, label, transform=ax.transAxes)
+
         size = 0.02
         bbox = ax.get_position()
         cax = ax.figure.add_axes([bbox.x1, bbox.y0, 0.02, bbox.y1- bbox.y0])
         cbar = ax.figure.colorbar(mp, cax=cax)
-        cbar.set_label(self.cbarlabel, rotation=270, labelpad=10.0)
+        # cbar.set_label(self.cbarlabel, rotation=270, labelpad=10.0)
 
         return ax
     
     
-def get_waves_data(start, end):
+def get_waves_data(start, end, datafolder='data/waves-survey/'):
     """Get the electric and magnetic field data from the Waves survey."""
     
-    wavesfiles = glob.glob('data/waves-survey/*{:s}*.CSV'.format(start.strftime('%Y%j')))
+    wavesfiles = glob.glob(datafolder + '*{:s}*.CSV'.format(start.strftime('%Y%j')))
 
     if len(wavesfiles) != 2:
         wavesindex = IndexFile(dataset='waves-survey')
-        _ = wavesindex.get_files_between_dates(start, end, DoDownload=True, sid='SURVEY')
+        _ = wavesindex.get_files_between_dates(
+            start, end, DoDownload=True, sid='SURVEY', outfolder=datafolder)
 
-        wavesfiles = glob.glob('data/waves-survey/*{:s}*.CSV'.format(start.strftime('%Y%j')))
+        wavesfiles = glob.glob(datafolder + '*{:s}*.CSV'.format(start.strftime('%Y%j')))
     
-        assert(len(wavesfiles) == 2)
+        # assert(len(wavesfiles) == 2)
         
     for wfile in wavesfiles:
         print('Reading Waves file - {:s}'.format(wfile))
         if '_E_' in wfile:
             wavesdataE = WavesData(filename=wfile, 
-                                   start=start - dt.timedelta(minutes=5), 
-                                   end=end + dt.timedelta(minutes=5))
+                                   start=start, 
+                                   end=end)
         else:
             wavesdataB = WavesData(filename=wfile, 
-                                   start=start - dt.timedelta(minutes=5), 
-                                   end=end + dt.timedelta(minutes=5))
+                                   start=start, 
+                                   end=end)
 
     return wavesdataE, wavesdataB
 

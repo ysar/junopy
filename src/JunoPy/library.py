@@ -211,7 +211,8 @@ def calc_deltaAlfvenJuno(times, satellite='IO'):
 
 
 
-def find_ticks_between_Mshell(start, end, nticks=6, timeformat='%H:%M:%S'):
+def find_ticks_between_Mshell(
+    start, end, nticks=6, timeformat='%H:%M:%S', appendlabels=True):
     """
     Given an axes object make the ticks appropriately for subplots.
     We would like to have :
@@ -232,16 +233,20 @@ def find_ticks_between_Mshell(start, end, nticks=6, timeformat='%H:%M:%S'):
             position_mag[i, 2], 
             np.sqrt(position_mag[i, 0]**2 + position_mag[i, 1]**2)) \
                 * 180 / np.pi
+        
+        r = np.sqrt(pos[0]**2 + pos[1]**2 + pos[2]**2)
 
-        if i == 0:
+        if i == 0 and appendlabels:
             tickstring.append(
             'Time   {:s}'.format(time_array[i].strftime(timeformat)) + '\n' +
+            'R     {:7.2f}'.format(r) + '\n' + 
             'M     {:7.2f}'.format(M) + '\n' +
             'MLat   {:7.2f}'.format(mlat) + '\n' +
             'Lon   {:7.2f}'.format(lon))
         else:
             tickstring.append(
                 time_array[i].strftime(timeformat) + '\n' +
+                '{:7.2f}'.format(r) + '\n' + 
                 '{:7.2f}'.format(M) + '\n' +
                 '{:7.2f}'.format(mlat) + '\n' +
                 '{:7.2f}'.format(lon))

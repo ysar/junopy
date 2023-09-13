@@ -55,8 +55,8 @@ class JediData:
         self.docalcCX   = kwargs.pop('docalcCX', False)
         self.cxtype    = kwargs.pop('cxtype', 'Hplus-O')
         self.calcEflux = kwargs.pop('calcEflux', False)
-        self.Eflux_pa1 = kwargs.pop('Eflux_pa1', 0)
-        self.Eflux_pa2 = kwargs.pop('Eflux_pa2', 15)
+        self.paMin     = kwargs.pop('paMin', 0)
+        self.paMax     = kwargs.pop('paMax', 180)
 
         if self.species == 'PROTON_TOFxPH':
             self.species = 'PROTON'
@@ -75,6 +75,8 @@ class JediData:
             self.df_raw = self.df_raw.loc[
                 self.start.strftime('%Y-%m-%d %H:%M:%S'):
                 self.end.strftime('%Y-%m-%d %H:%M:%S')]
+            
+        self.mask_invalid_pa()
 
         if self.df_raw.empty: return
         else:   
@@ -95,7 +97,7 @@ class JediData:
 
         if self.calcEflux:
             self.calc_energy_flux(
-                pa1=self.Eflux_pa1, pa2=self.Eflux_pa2)
+                pa1=self.paMin, pa2=self.paMax)
 
         self.resample()
 
@@ -230,7 +232,24 @@ class JediData:
         else:
             raise Exception('Unequal energy channels within each SSD.')
 
-    
+
+    def mask_invalid_pa(self):
+        """
+        Mask all values outside the valid pitch angle range.
+        """
+        for i in range(self.nSSD):
+            channels = self.metadata.loc[
+                self.metadata['channel'].str.contains('T{:d}'.format(i)),
+                'channel']
+            
+            condition = (
+                (self.df_raw['Pitch_Angle_T{:d}'.format(i)] < self.paMin) |
+                (self.df_raw['Pitch_Angle_T{:d}'.format(i)] > self.paMax))
+            
+            self.df_raw.loc[condition, 'Pitch_Angle_T{:d}'.format(i)] = np.NaN
+
+
+
     def convert_to_hdf_file(self):
         """
         Save the dataframe information into hdf5 files.
@@ -298,15 +317,6 @@ class JediData:
 
 
             meta = meta[~(meta['dE'] < 0)]
-
-            # meta.loc[meta['dE'] < 0, 'dE'] = 0.
-
-            # Identify all energy channels within this range.
-            # meta = meta[~((meta['Ehigh'] < self.energybins[j]) & 
-            #               (meta['Elow'] < self.energybins[j]))]
-
-            # meta = meta[~((meta['Ehigh'] > self.energybins[j + 1]) & 
-            #               (meta['Elow']  > self.energybins[j + 1]))]
 
             # Now we know the energy channels that are present within the j-th 
             # energy bin. Knowing this, we can identify the pitch
@@ -498,10 +508,10 @@ class JediData:
                 # distribution. Unlike JADE, JEDI-90 and 270 sample the full-sky
                 # provided the magnetic field is in the spin plane. 
 
-        if self.hasEflux:
-            self.energyflux = self.energyflux\
-                .resample(self.dtbin, offset=self.dtbin/2)\
-                .agg(np.nanmean)
+        # if self.hasEflux:
+        #     self.energyflux = self.energyflux\
+        #         .resample(self.dtbin, offset=self.dtbin/2)\
+        #         .agg(np.nanmean)
 
 
     def calc_cx_rate(self):

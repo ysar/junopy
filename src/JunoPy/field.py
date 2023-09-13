@@ -230,27 +230,29 @@ def trace_field_bequator(start, g, h, N, deltaS=0.2, scheme='RK4'):
             print(np.sqrt(np.sum(pos**2)), end='\r')
             
         return pos
-    
-            
-def get_bunit(pos, g, h, N, equation_type='analytic'):
+
+
+def get_B(pos, g, h, N, equation_type='analytic', normalize=True):
     """Get the magnetic field unit vector."""
     r_a = np.sqrt(np.sum(pos**2))
     theta = np.arccos(pos[2] / r_a)
     phi = np.arctan2(pos[1], pos[0])
     
-    # B_int = calc_internal_field(r_a, theta, phi, g, h, N)
-    
-    Bx_int, By_int, Bz_int = JupiterMag.Internal.Field(pos[0],pos[1],pos[2]) 
-        # calc_internal_field(r_a, theta, phi, g, h, N)
+    B_int = calc_internal_field(r_a, theta, phi, g, h, N)
+
+    # Bx_int, By_int, Bz_int = JupiterMag.Internal.Field(pos[0],pos[1],pos[2]) 
+    #     # calc_internal_field(r_a, theta, phi, g, h, N)
         
-    B_int = np.array([Bx_int[0], By_int[0], Bz_int[0]])
+    # B_int = np.array([Bx_int[0], By_int[0], Bz_int[0]])
     B_cs = calc_currentsheet_field(pos, equation_type=equation_type)
     B = B_int + B_cs
 
-    return B / np.sqrt(np.sum(B**2))
+    if normalize:
+        return B / np.sqrt(np.sum(B**2))
+    else:
+        return B
     
-    
-        
+            
 def trace_field_dormandprince(start, gCoeff, hCoeff, N, h=0.2, Atol=1.0, equation_type='analytic'):
     
     streamline = np.zeros((10000, 3)) * np.NaN
@@ -280,7 +282,7 @@ def trace_field_dormandprince(start, gCoeff, hCoeff, N, h=0.2, Atol=1.0, equatio
     facmin = 0.125
     
     count = 1
-    while np.sqrt(np.sum(pos**2)) >= 0.99 and np.sqrt(np.sum(pos**2)) <= 100:
+    while np.sqrt(np.sum(pos**2)) >= 0.999 and np.sqrt(np.sum(pos**2)) <= 100:
         
         pos_cap = pos * 1.0
         pos_new = pos * 1.0
@@ -289,7 +291,10 @@ def trace_field_dormandprince(start, gCoeff, hCoeff, N, h=0.2, Atol=1.0, equatio
         
         while err > 1.0:
 
-            k[0, :] = get_bunit(pos_new, gCoeff, hCoeff, N, equation_type=equation_type)
+            k[0, :] = get_B(
+                pos_new, gCoeff, hCoeff, N, 
+                equation_type=equation_type, normalize=True)
+            ds = 0
 
             for i in range(1, 7):
 
@@ -297,10 +302,14 @@ def trace_field_dormandprince(start, gCoeff, hCoeff, N, h=0.2, Atol=1.0, equatio
                 for j in range(i):
                     posStep += h * a[i, j] * k[i - 1, :]
 
-                k[i, :] = get_bunit(posStep, gCoeff, hCoeff, N)
+                k[i, :] = get_B(
+                    posStep, gCoeff, hCoeff, N, 
+                    equation_type=equation_type, normalize=True)
 
                 pos_new += h * b[i] * k[i, :]
                 pos_cap += h * bcap[i] * k[i, :]
+
+                ds += h * b[i] * k[i, :]
 
             sc = Atol + np.maximum(np.abs(pos), np.abs(pos_new)) * Rtol
             err = np.sqrt(1 / 3 * np.sum(((pos - pos_new) / sc)**2))
@@ -316,9 +325,4 @@ def trace_field_dormandprince(start, gCoeff, hCoeff, N, h=0.2, Atol=1.0, equatio
             
     return streamline # [~np.all(streamline == 0, axis=1)]
     
-    
-    
-def trace_field_scipy(start, gCoeff, hCoeff, N):
-    
-    pass
     

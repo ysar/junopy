@@ -124,9 +124,9 @@ class MagData(object):
             pos, _ = get_juno_position(
                 self.df.index, coordsystem=self.coordsystem)
             
-            x = pos[:, 0] * 71492
-            y = pos[:, 1] * 71492
-            z = pos[:, 2] * 71492
+            x = pos[:, 0] * 71492.
+            y = pos[:, 1] * 71492.
+            z = pos[:, 2] * 71492.
 
         
         self.df['R'] = np.sqrt(x**2 + y**2 + z**2)
@@ -157,7 +157,7 @@ class MagData(object):
 
         def tmp_func_convert(row, outCoord=outCoord):
 
-            time = spice.str2et(row.name.strftime('%Y-%m-%d %H:%M:%S'))
+            time = spice.str2et(row.name.strftime('%Y-%m-%dT%H:%M:%S.%f'))
             R = spice.pxform(self.coordsystem, outCoord, time)
             B = np.array([row['Bx'], row['By'], row['Bz']])
             X = np.array([row['X'], row['Y'], row['Z']])
@@ -165,7 +165,8 @@ class MagData(object):
             X_new = np.matmul(R, X)
             B_new = np.matmul(R, B)
 
-            return B_new[0], B_new[1], B_new[2], X_new[0], X_new[1], X_new[2]
+            return B_new[0], B_new[1], B_new[2],\
+                   X_new[0], X_new[1], X_new[2]
         
         t = self.df.apply(tmp_func_convert, axis=1, result_type='expand')
 
@@ -968,6 +969,9 @@ def get_mag_data(start, end,
 
 
     magdata = []
+
+    
+
     for day in pd.date_range(start, end):
         
         files = glob.glob(
@@ -993,3 +997,37 @@ def get_mag_data(start, end,
         result = merge_magdata(result, magdata[i + 1])
 
     return result
+
+
+
+# 
+def calc_Mshell(pos):
+    
+    JupiterMag.Con2020.Config(equation_type='analytic')
+    
+    Bm = []
+    lenfield = []
+    
+    T_analytic = JupiterMag.TraceField(
+        L * a * np.cos(phi), L * a * np.sin(phi), 0,
+        IntModel='jrm33', ExtModel='Con2020')
+
+    trace = T_analytic.TraceDict()
+    Bmag = np.sqrt(
+        trace['Bx'][0]**2 + trace['By'][0]**2 + trace['Bz'][0]**2)
+    # rad = np.sqrt(trace['x'][0]**2 + trace['y'][0]**2 + trace['z'][0]**2)
+
+    length = 0
+    for i in range(len(trace['x'][0]) - 1):
+        length += (
+            (trace['x'][0][i + 1] - trace['x'][0][i])**2 + \
+            (trace['y'][0][i + 1] - trace['y'][0][i])**2 + \
+            (trace['z'][0][i + 1] - trace['z'][0][i])**2)
+
+
+    Bm.append(Bmag.min())
+    lenfield.append(length)
+        
+    Bm = np.array(Bm)
+    
+    return Bm.mean()

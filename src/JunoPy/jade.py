@@ -44,9 +44,11 @@ class JadeData(object):
         self.nEQPAbins = kwargs.pop('nEQPAbins', 9)
         self.units     = kwargs.pop('units', 'PSD')
         self.calcEflux = kwargs.pop('calcEflux', False)
-        self.Eflux_pa1 = kwargs.pop('Eflux_pa1', 0)
-        self.Eflux_pa2 = kwargs.pop('Eflux_pa2', 15)
-        
+        self.paMin     = kwargs.pop('paMin', 0)
+        self.paMax     = kwargs.pop('paMax', 180)
+        self.addBackground = kwargs.pop('addBackground', False)
+        self.useOnlyBackground = kwargs.pop('useOnlyBackground', False)
+
         docalcCX = kwargs.pop('docalcCX', False)
         self.cxtype = kwargs.pop('cxtype', 'Hplus-O')
 
@@ -64,7 +66,7 @@ class JadeData(object):
 
         if self.calcEflux:
             self.calc_energy_flux(
-                pa1=self.Eflux_pa1, pa2=self.Eflux_pa2)
+                pa1=self.paMin, pa2=self.paMax)
             
         self.resample()
 
@@ -98,7 +100,20 @@ class JadeData(object):
         elevation = self.data_raw['DIM2_ELEVATION'][0] * np.pi / 180
         azimuth   = self.data_raw['DIM2_AZIMUTH_DESPUN'][0] * np.pi / 180
         
-        # background = self.data_raw['BACKGROUND'][0] * 1.0
+        self.data_sigma = self.data_raw['DATA_SIGMA'][0] * 1.0
+
+        # Add in the background (CAUTION: DO THIS ONLY WHEN NEEDED)
+        if self.addBackground:
+            background = self.data_raw['BACKGROUND'][0] * 1.0
+            self.data_sigma = np.sqrt(
+                self.data_raw['DATA_SIGMA'][0]**2 + \
+                self.data_raw['BACKGROUND_SIGMA'][0]**2)
+            flux += background
+
+        if self.useOnlyBackground:
+            flux = self.data_raw['BACKGROUND'][0] * 1.0
+            self.data_sigma = self.data_raw['BACKGROUND_SIGMA'][0] * 1.0
+        
 
         # Change all negative values to zero
         flux[flux < -999990] = np.NaN
@@ -120,7 +135,9 @@ class JadeData(object):
             elevation   = elevation[:, indices, :]
             azimuth     = azimuth[:, indices, :]
             flux        = flux[:, indices, :]
+            self.data_sigma = self.data_sigma[:, indices, :]
             energylin   = energylin[indices]
+
 
         self.energybins = np.zeros(len(energylin) + 1)
         self.energybins[1:-1] = np.sqrt(energylin[:-1] * energylin[1:])
@@ -130,12 +147,12 @@ class JadeData(object):
         energybinsize = self.energybins[1:] - self.energybins[:-1]
 
         # If high rate, remove data from the first 4 anodes
-        if self.isHighRate:
-            assert (len(elevation[:, 0, 0] == 12))
-            energies = energies[4:, :, :]
-            elevation = elevation[4:, :, :]
-            azimuth = azimuth[4:, :, :]
-            flux = flux[4:, :, :]
+        # if self.isHighRate:
+        #     assert (len(elevation[:, 0, 0] == 12))
+        #     energies = energies[4:, :, :]
+        #     elevation = elevation[4:, :, :]
+        #     azimuth = azimuth[4:, :, :]
+        #     flux = flux[4:, :, :]
 
 
         # Get magnetometer data for pitch angle calculations
@@ -171,6 +188,10 @@ class JadeData(object):
         nEorig = flux.shape[1]
         nTimes = flux.shape[2]
 
+        # Mask invalid pitch angles
+        mask = ((pitchangles < self.paMin) | (pitchangles > self.paMax))
+        flux = ma.masked_where(mask, flux)
+
         # Rebin from LookDirection to PitchAngle
         flux_rebin = np.zeros((self.nPAbins, nEorig, nTimes))
         
@@ -197,7 +218,13 @@ class JadeData(object):
         self.energytime = pd.DataFrame(
             index=self.times,
             columns=['Ebin_{:d}'.format(x) for x in range(self.nEbins)],
-            data=np.average(self.data_pro, axis=0).T) # , weights=solidAngle).T)
+            data=np.average(self.data_pro, axis=0).T)
+        
+        self.energytime_sigma = pd.DataFrame(
+            index=self.times,
+            columns=['Ebin_{:d}'.format(x) for x in range(self.nEbins)],
+            data=np.sqrt(np.nansum(self.data_sigma**2, axis=0)).T / flux.shape[0])
+            # Combine uncertainty over all look-directions
 
         self.pitchangletime = pd.DataFrame(
             index=self.times,
@@ -305,10 +332,10 @@ class JadeData(object):
             #         .resample(self.dtbin, offset=self.dtbin/2)\
             #         .agg(np.nanmean)
 
-        if self.hasEflux: 
-            self.energyflux = self.energyflux\
-                .resample(self.dtbin, offset=self.dtbin/2)\
-                .agg(np.nanmean)
+        # if self.hasEflux: 
+        #     self.energyflux = self.energyflux\
+        #         .resample(self.dtbin, offset=self.dtbin/2)\
+        #         .agg(np.nanmean)
 
 
     def calc_cx_rate(self):
@@ -368,7 +395,7 @@ class JadeData(object):
     def plot_spectra(
         self, ax, data='Energy', donorm=False,
         vmin=None, vmax=None, cmap=None, logplot=True,
-        label=None):
+        label=None, zorder=1, plotcolorbar=True):
         """
         Generic method to plot a timeseries spectra.
         """
@@ -409,19 +436,21 @@ class JadeData(object):
         else:
             norm = colors.Normalize(vmin=vmin, vmax=vmax)
 
-        mp = ax.pcolormesh(timearray, bins, z, norm=norm, cmap=cmap)
+        mp = ax.pcolormesh(
+            timearray, bins, z, norm=norm, cmap=cmap, zorder=zorder)
 
         ax.set_ylim([bins[0], bins[-1]])
 
-        bbox = ax.get_position()
-        cax = ax.figure.add_axes(
-            [bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
-        cbar = ax.figure.colorbar(mp, cax=cax)
+        if plotcolorbar:
+            bbox = ax.get_position()
+            cax = ax.figure.add_axes(
+                [bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
+            cbar = ax.figure.colorbar(mp, cax=cax)
 
         if label:
             ax.text(0.1, 1.05, label, transform=ax.transAxes)
 
-        return ax
+        return ax, mp
     
     
     def find_valid_data_time(self):
@@ -435,7 +464,7 @@ class JadeData(object):
         return (count * (self.eqpad.index[1] - self.eqpad.index[0])).total_seconds()
 
 
-    def calc_energy_flux(self, pa1=0, pa2=np.pi):
+    def calc_energy_flux(self, pa1=0, pa2=180):
         """
         Calculate the upward/downward energy flux based on the formula given
         in Mauk et al. (2014).
@@ -451,7 +480,7 @@ class JadeData(object):
 
             conversionfactor = Eeff * dE * e * 1e4 * np.pi
 
-            self.energyflux += np.nansum(
+            self.energyflux += np.sum(
                 self.data_pro[condition, i, :].T * conversionfactor, axis=1)
             
         self.energyflux[self.energyflux == 0] = np.NaN 
@@ -463,6 +492,9 @@ def merge_two_timeseries(df1, df2):
     df = pd.concat([df1, df2])
     return df.groupby(df.index).agg(lambda x: np.nanmean(x))
 
+def merge_two_timeseries_quadrature(df1, df2):
+    df = pd.concat([df1, df2])
+    return df.groupby(df.index).agg(lambda x: np.sqrt(np.nansum(x**2)) / len(x))
 
 def jade_merge(j1, j2):
     j3 = JadeData()
@@ -481,6 +513,10 @@ def jade_merge(j1, j2):
     j3.energytime = merge_two_timeseries(j1.energytime, j2.energytime)
     j3.pitchangletime = merge_two_timeseries(
         j1.pitchangletime, j2.pitchangletime)
+    
+    # Merge data_sigma in quadrature
+    j3.energytime_sigma = merge_two_timeseries_quadrature(
+        j1.energytime_sigma, j2.energytime_sigma)
 
     if j1.hasEQPAD and j2.hasEQPAD:
         j3.eq_pitchanglebins = j1.eq_pitchanglebins
@@ -505,8 +541,8 @@ def get_jade_data(start, end, species=3, **kwargs):
     start and end times. 
     """
     if isinstance(start, dt.datetime):
-        ts = start.strftime('%Y-%jT%H:%M')
-        te = end.strftime('%Y-%jT%H:%M')
+        ts = start.strftime('%Y-%jT%H:%M:%S')
+        te = end.strftime('%Y-%jT%H:%M:%S')
     else:
         ts = start
         te = end
@@ -542,7 +578,8 @@ def get_jade_data(start, end, species=3, **kwargs):
                 idl("data = jade_convert_data_units_from_cnt(data, UNITS='DNF')")
             else:
                 idl("data = jade_convert_data_units_from_cnt(data, UNITS='DNF', q=1)")
-
+        elif kwargs['units'] == 'DEF':
+            idl("data = jade_convert_data_units_from_cnt(data, UNITS='DEF')")
 
         idl("save, data, FILENAME = '{:s}'".format(filename))
         
@@ -562,6 +599,9 @@ def get_jade_data(start, end, species=3, **kwargs):
                 idl("data = jade_convert_data_units_from_cnt(data, UNITS='DNF')")
             else:
                 idl("data = jade_convert_data_units_from_cnt(data, UNITS='DNF', q=1)")
+        elif kwargs['units'] == 'DEF':
+            idl("data = jade_convert_data_units_from_cnt(data, UNITS='DEF')")
+
 
         idl("save, data, FILENAME = '{:s}'".format(filename))
 
@@ -632,14 +672,26 @@ class JadeMomentsData(object):
     
         self.data['Density']  = self.data_raw['N_CC'][0] * 1.0
         self.data['Pressure'] = self.data_raw['PRESSURE_PA'][0] * 1.0
-        self.data['Temp']     = self.data_raw['T'][0] * 1.0
+        self.data['Temp']     = self.data_raw['TEMP_EV'][0] * 1.0
         self.data['Vmag']     = self.data_raw['VMAG_JSS_KMPS'][0] * 1.0
         self.data['Vx_JSS']   = self.data_raw['V_JSSXYZ_KMPS'][0][0, :] * 1.0
         self.data['Vy_JSS']   = self.data_raw['V_JSSXYZ_KMPS'][0][1, :] * 1.0
         self.data['Vz_JSS']   = self.data_raw['V_JSSXYZ_KMPS'][0][2, :] * 1.0
 
- 
+        # Uncertainties
+        self.data['SigmaDensity']  = self.data_raw['N_SIGMA_CC'][0] * 1.0
+        self.data['SigmaPressure'] = self.data_raw['PRESSURE_SIGMA_PA'][0] * 1.0
+        self.data['SigmaTemp']     = self.data_raw['TEMP_SIGMA_EV'][0] * 1.0
+        self.data['SigmaVmag']     = \
+            self.data_raw['VMAG_JSS_SIGMA_KMPS'][0] * 1.0
+        self.data['SigmaVx_JSS']   = \
+            self.data_raw['V_JSSXYZ_SIGMA_KMPS'][0][0, :] * 1.0
+        self.data['SigmaVy_JSS']   = \
+            self.data_raw['V_JSSXYZ_SIGMA_KMPS'][0][1, :] * 1.0
+        self.data['SigmaVz_JSS']   = \
+            self.data_raw['V_JSSXYZ_SIGMA_KMPS'][0][2, :] * 1.0
 
+ 
 def merge_moments_data(j1, j2):
     """Merge two instances of JadeMomentsData"""
     assert (j1.hasValidData and j2.hasValidData) ; j3.hasValidData = True
@@ -720,3 +772,4 @@ def get_jade_moments(start, end, species=3, **kwargs):
     else:
         return JadeMomentsData()
         
+# -----------------------------------------------------------------------------

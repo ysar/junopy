@@ -12,10 +12,9 @@ def download_file(fileurl, fileoutname, CHUNK=16*1024*16):
     """Opens a URL and downloads it's contents onto disk."""
     with urllib.request.urlopen(fileurl) as g:
         with open(fileoutname, 'wb+') as f:
-            f.write(g.read())
-            
-            # for chunk in iter(lambda: g.read(CHUNK), b''):
-            #     f.write(chunk) #.decode('UTF-8'))
+            # f.write(g.read())
+            for chunk in iter(lambda: g.read(CHUNK), b''):
+                f.write(chunk) #.decode('UTF-8'))
             
 
 def download_multiple_files(urls, outfolder=''):

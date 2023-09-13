@@ -4,14 +4,16 @@ Module to work with Juno spice kernels.
 For now we will only use spice to obtain spacecraft position.
 """
 import os
+import re
 import numpy as np
 import datetime as dt
 import pandas as pd
 import spiceypy as spice
 import ftplib
+import urllib
 import JupiterMag
 
-from JunoPy.download import download_file, download_multiple_files
+from JunoPy.download import download_file, download_multiple_files, download_file
 from contextlib import ContextDecorator
 
 SPICE_DIR = 'spice'
@@ -35,39 +37,72 @@ class withspiceloaded(ContextDecorator):
 def download_juno_kernels(doDownload=True):
     """Downloads all relevant Juno related SPICE kernels into a directory."""
     
-    kernel_urls = [
-        'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/fk/juno_v12.tf',
-        'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/lsk/naif0012.tls',
-        'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/pck/pck00010.tpc',
-        'https://naif.jpl.nasa.gov/pub/naif/JUNO/misc/jszalay/juno_phi_o_v1.tf',
-        'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/sclk/JNO_SCLKSCET.00134.tsc',    
-    ]
+    # kernel_urls = [
+    #     'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/fk/juno_v12.tf',
+    #     'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/lsk/naif0012.tls',
+    #     'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/pck/pck00010.tpc',
+    #     'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/sclk/JNO_SCLKSCET.00151.tsc',    
+    # ]
 
-    with ftplib.FTP("naif.jpl.nasa.gov") as ftp:
+    URL_TOP = "https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/"
+    
+    kernel_urls = []
 
-        ftp.login()
-        ftp.cwd('/pub/naif/JUNO/kernels/spk')
+    # Identify latest files from the fk, lsk, pck, and sclk folders
+    extensions = {
+        'fk': '.tf',
+        'pck': '.tpc',
+        'lsk': '.tls',
+        'sclk': 'tsc'
+    }
 
-        for fname in ftp.nlst():
-            if not ('.bsp' in fname[-4:]):
-                continue
+    for folder in extensions:
+        with urllib.request.urlopen(URL_TOP + '{:s}/'.format(folder)) as page:
+            pattern = r'<a href="(\S+)' + '{:s}">'.format(extensions[folder])
+            fname = re.findall(
+                pattern, page.read().decode('UTF-8'))[-1]
+            kernel_urls.append(
+                URL_TOP + '{:s}/{:s}{:s}'.format(
+                    folder, fname, extensions[folder]))
+            
 
-            if (fname[0:3] in ['de4', 'jup']) or \
-                ('spk_rec' in fname[0:7]):
-                kernel_urls.append(
-                    'https://naif.jpl.nasa.gov' + ftp.pwd() + '/' + fname)
+    # Identify all reconstructed ck files for download
+    folder = 'ck'
+    pattern = r'<a href="juno_sc_rec_(1[6-9]|2[0-5])(\S+).bc"'
+        # Note: This Regex pattern is complicated because we only need the
+        # reconstructed ck kernels for years 2016-2025
 
-        ftp.cwd('/pub/naif/JUNO/kernels/ck')
-
-        for fname in ftp.nlst():
-            if 'juno_sc' in fname[:7]:
-                kernel_urls.append(
-                    'https://naif.jpl.nasa.gov' + ftp.pwd() + '/' + fname)
+    with urllib.request.urlopen(URL_TOP + 'ck/') as page:
+        files = re.findall(
+            pattern, page.read().decode('UTF-8'))
+    
+    for f in files:
+        kernel_urls.append(
+            URL_TOP + 'ck/' + 'juno_sc_rec_' + f[0] + f[1] + '.bc')
+        
+    # Identify all relevant reconstructed spk files for download
+    folder = 'spk'
+    pattern = r'<a href="(\S+).bsp">'
+    with urllib.request.urlopen(URL_TOP + 'spk/') as page:
+        files = re.findall(
+            pattern, page.read().decode('UTF-8'))
+        
+    for f in files:
+        if f[:3] in ['de4', 'jup'] or \
+            'spk_rec' in f[:7]:
+            kernel_urls.append(
+                URL_TOP + 'spk/' + f + '.bsp')
                 
     if doDownload:
         print("Downloading SPICE kernels ...")
-        download_multiple_files(
-            kernel_urls, os.path.join(SPICE_DIR, 'kernels'))
+
+        for url in kernel_urls:
+            download_file(
+                url, 
+                os.path.join(SPICE_DIR, 'kernels', os.path.split(url)[-1]))
+            
+        # download_multiple_files(
+        #     kernel_urls, os.path.join(SPICE_DIR, 'kernels'))
     
     print("Creating Meta Kernel file ...")
     with open(METAFILE, 'w') as f:
@@ -128,15 +163,15 @@ def get_ganymede_pos(time, coordsystem='IAU_JUPITER'):
     return position / 71492
 
 
-# def spice_load_kernels():
-#     """Load SPICE kernels into cache (?)"""
-#     metafile = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
-#     spice.furnsh(metafile)
-#     spice.furnsh(os.path.join(SPICE_DIR, 'kernels', 'juno_phi_o_v1.tf'))
+def spice_load_kernels():
+    """Load SPICE kernels into cache (?)"""
+    metafile = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
+    spice.furnsh(metafile)
+    spice.furnsh(os.path.join(SPICE_DIR, 'kernels', 'juno_phi_o_v1.tf'))
 
 
-# def spice_unload_kernels():
-#     """Unload SPICE kernels."""
-#     metafile = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
-#     spice.unload(metafile)
-#     spice.unload(os.path.join(SPICE_DIR, 'kernels', 'juno_phi_o_v1.tf'))
+def spice_unload_kernels():
+    """Unload SPICE kernels."""
+    metafile = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
+    spice.unload(metafile)
+    spice.unload(os.path.join(SPICE_DIR, 'kernels', 'juno_phi_o_v1.tf'))

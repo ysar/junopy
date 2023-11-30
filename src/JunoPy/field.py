@@ -140,8 +140,13 @@ def read_coefficients_file(filename, degree=None, doNormalize=False):
     return g, h, N
 
 
-def calc_currentsheet_field(pos, equation_type='analytic'):
-    def_model = con2020.Model(equation_type=equation_type)
+def calc_currentsheet_field(pos, equation_type='analytic', docurve=True):
+    if not docurve:
+        tilt = 0.001
+
+    def_model = con2020.Model(
+        equation_type=equation_type, xt__cs_tilt_degs=tilt)
+    
     return def_model.Field(pos[0], pos[1], pos[2])
 
 
@@ -232,7 +237,8 @@ def trace_field_bequator(start, g, h, N, deltaS=0.2, scheme='RK4'):
         return pos
 
 
-def get_B(pos, g, h, N, equation_type='analytic', normalize=True):
+def get_B(pos, g, h, N, equation_type='analytic', 
+          normalize=True, docurve=True):
     """Get the magnetic field unit vector."""
     r_a = np.sqrt(np.sum(pos**2))
     theta = np.arccos(pos[2] / r_a)
@@ -244,7 +250,8 @@ def get_B(pos, g, h, N, equation_type='analytic', normalize=True):
     #     # calc_internal_field(r_a, theta, phi, g, h, N)
         
     # B_int = np.array([Bx_int[0], By_int[0], Bz_int[0]])
-    B_cs = calc_currentsheet_field(pos, equation_type=equation_type)
+    B_cs = calc_currentsheet_field(
+        pos, equation_type=equation_type, docurve=docurve)
     B = B_int + B_cs
 
     if normalize:
@@ -253,7 +260,9 @@ def get_B(pos, g, h, N, equation_type='analytic', normalize=True):
         return B
     
             
-def trace_field_dormandprince(start, gCoeff, hCoeff, N, h=0.2, Atol=1.0, equation_type='analytic'):
+def trace_field_dormandprince(
+        start, gCoeff, hCoeff, N, h=0.2, Atol=1.0, 
+        equation_type='analytic', docurve=True):
     
     streamline = np.zeros((10000, 3)) * np.NaN
     streamline[0, :] = start * 1.0
@@ -293,7 +302,7 @@ def trace_field_dormandprince(start, gCoeff, hCoeff, N, h=0.2, Atol=1.0, equatio
 
             k[0, :] = get_B(
                 pos_new, gCoeff, hCoeff, N, 
-                equation_type=equation_type, normalize=True)
+                equation_type=equation_type, normalize=True, docurve=docurve)
             ds = 0
 
             for i in range(1, 7):
@@ -304,7 +313,7 @@ def trace_field_dormandprince(start, gCoeff, hCoeff, N, h=0.2, Atol=1.0, equatio
 
                 k[i, :] = get_B(
                     posStep, gCoeff, hCoeff, N, 
-                    equation_type=equation_type, normalize=True)
+                    equation_type=equation_type, normalize=True, docurve=docurve)
 
                 pos_new += h * b[i] * k[i, :]
                 pos_cap += h * bcap[i] * k[i, :]

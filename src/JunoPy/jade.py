@@ -452,6 +452,13 @@ class JadeData(object):
 
         return ax, mp
     
+
+    def plot_energy_vs_pitchangle_spectra(self, ax):
+        """
+        Plot energy vs pitch angle spectra for some time interval.
+
+        """
+        pass
     
     def find_valid_data_time(self):
         """Find times with valid data."""
@@ -472,16 +479,45 @@ class JadeData(object):
         midpa = 0.5 * (self.pitchanglebins[1:] + self.pitchanglebins[:-1])
         condition = (midpa >= pa1) & (midpa <= pa2)
         
+        solidAngle = 4 * np.pi * \
+            np.sin(
+                (self.pitchanglebins[:-1] + 
+                 self.pitchanglebins[1:]) * 0.5 * np.pi / 180) * \
+            np.sin(
+                (self.pitchanglebins[1] - 
+                 self.pitchanglebins[0]) * 0.5 * np.pi / 180)
+        
+        # self.energyflux = pd.Series(index=self.times, data=0.)
+        # for i in range(self.nEbins):
+
+        #     Eeff = np.sqrt(self.energybins[i] * self.energybins[i + 1])
+        #     dE = self.energybins[i + 1] - self.energybins[i]
+
+        #     conversionfactor = Eeff * dE * e * 1e4 * np.pi
+        #     # solidAngle * cxcs(Eeff * 1e-3) * 1e-16 * 1e-3 * dE * 2
+
+        #     self.energyflux += np.sum(
+        #         self.data_pro[condition, i, :].T * conversionfactor, axis=1)
+
         self.energyflux = pd.Series(index=self.times, data=0.)
         for i in range(self.nEbins):
-
             Eeff = np.sqrt(self.energybins[i] * self.energybins[i + 1])
             dE = self.energybins[i + 1] - self.energybins[i]
 
-            conversionfactor = Eeff * dE * e * 1e4 * np.pi
+            # We need to convert (cm-2 . s-1 . keV-1 . sr-1) to (mW . m-2)
+            # This needs a 1e4 factor  and multiplication with e 
+            # = (1e4 to get from cm-2 to m-2) 
+            # * (1e-3 to get from keV-1 to eV-1)
+            # * (e to convert eV to J)
+            # * (1e3 to convert W to mW).
 
-            self.energyflux += np.sum(
-                self.data_pro[condition, i, :].T * conversionfactor, axis=1)
+            conversionfactor = \
+                solidAngle[condition] * Eeff * dE * e * 1e4
+        
+            self.energyflux += \
+                np.nansum(
+                    self.data_pro[condition, i, :].T * conversionfactor, axis=1)
+            
             
         self.energyflux[self.energyflux == 0] = np.NaN 
         self.hasEflux = True

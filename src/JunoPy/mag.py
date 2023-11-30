@@ -311,6 +311,7 @@ class MagData(object):
         return ax
     
     
+    
     def save_to_hdf5(self):
         """
         Save the current instance to an hdf5 file.

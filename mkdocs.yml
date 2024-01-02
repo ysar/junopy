@@ -1,0 +1,25 @@
+site_name: "JunoPy"
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Modules:
+    - Magnetometer: data/magnetometer.md
+    - Waves: data/waves.md
+    - JEDI: data/jedi.md
+    - JADE: data/jade.md
+    - Auxiliary: data/auxiliary.md
+  - About: 
+    - License: about/license.md
+    - Release Notes: about/release-notes.md
+    - Contributing: about/contributing.md
+
+theme:
+  name: "mkdocs"
+
+plugins:
+- search
+- mkdocstrings
+
+markdown-extensions:
+  - smarty

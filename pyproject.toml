@@ -1,0 +1,30 @@
+[project]
+name = "JunoPy"
+version = "1.0.0"
+authors = [
+  { name="Yash Sarkango"},
+]
+description = "A package to use plasma and fields data from the Juno spacecraft."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GPL-3.0-only",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "numpy>=1.26",
+    "matplotlib>=3.8",
+    "pandas>=2.1",
+    "scipy>=1.11",
+    "spiceypy>=6.0",
+    "h5py>=1.14",
+    "pytest",
+    "JupiterMag @ git+https://github.com/mattkjames7/JupiterMag.git"
+]
+
+
+[project.urls]
+Homepage = "https://github.com/pypa/sampleproject"
+Issues = "https://github.com/pypa/sampleproject/issues"

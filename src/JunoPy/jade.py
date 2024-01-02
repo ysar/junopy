@@ -230,6 +230,19 @@ class JadeData(object):
             index=self.times,
             columns=['PAbin_{:d}'.format(x) for x in range(self.nPAbins)],
             data=np.average(self.data_pro, axis=1, weights=energybinsize).T)
+        
+
+        # When averagin over energy channels, weigh the data by the energy bin
+        # width.
+        # We need to swap axes to enable numpy broadcasting
+        pasigma = np.swapaxes(self.data_sigma, 1, 2) * energybinsize
+        pasigma = np.sqrt(np.nansum(pasigma**2, axis=2)) / np.sum(energybinsize)
+
+        self.pitchangletime_sigma = pd.DataFrame(
+            index=self.times,
+            columns=['Ebin_{:d}'.format(x) for x in range(self.nEbins)],
+            data=pasigma.T
+        )
 
 
         # Calculate equatorial pitch angles if database file is provided 

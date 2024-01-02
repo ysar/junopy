@@ -428,6 +428,22 @@ class JediData:
             self.pitchanglebins = bins
 
 
+    def create_energy_pitchangle_array(self):
+        """
+        Create an array analogous to the JADE data structure organized by 
+        (pitchangle, energy, time)
+        """
+        data = np.zeros((
+            len(self.pitchanglebins) - 1,
+            len(self.nEbins) - 1,
+            len(self.df_raw.index)))
+        
+        for i, row in self.df_raw.iterrows():
+            pass
+            
+        
+
+
     def calc_equatorial_pad(self):
         """
         Create new columns called EQPitch_Angles corresponding to the 

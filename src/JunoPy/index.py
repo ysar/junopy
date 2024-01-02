@@ -93,7 +93,9 @@ class IndexFile(object):
 
 
     def get_files_between_dates(
-        self, startdate, enddate, sid='', DoDownload=False, outfolder=None):
+        self, startdate, enddate, 
+        sid='', 
+        DoDownload=False, outfolder=None, getLBL=False):
         """
         Given two dates, find all index files corresponding to time between.
         
@@ -166,6 +168,14 @@ class IndexFile(object):
                     download_file(
                         PDS_URL + DATASETS[self.dataset] + '/' + \
                         f[:-4] + EXTENSIONS[self.dataset],
+                        downfile)
+
+                if getLBL:
+                    
+                    downfile = os.path.join(outfolder, f.split('/')[-1])
+                    download_file(
+                        PDS_URL + DATASETS[self.dataset] + '/' + \
+                        f,
                         downfile)
 
             # download_multiple_files(

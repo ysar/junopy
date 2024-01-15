@@ -21,10 +21,7 @@ dependencies = [
     "spiceypy>=6.0",
     "h5py>=1.14",
     "pytest",
-    "JupiterMag @ git+https://github.com/mattkjames7/JupiterMag.git"
+    "mkdocs",
+    "pymdown-extensions",
 ]
 
-
-[project.urls]
-Homepage = "https://github.com/pypa/sampleproject"
-Issues = "https://github.com/pypa/sampleproject/issues"

@@ -15,7 +15,7 @@ Using a virtual environment is a straightforward way to prevent conflict between
 different versions of the same package and compartmentalize your workflow. If 
 using conda, you can create a new virtual environment easily using 
 
-        conda create -n JunoPy-env python=3 
+        $ conda create -n JunoPy-env python=3 
 
     The above command will create a new environment called `JunoPy-env` and 
     install Python3 in that environment.  
@@ -28,13 +28,13 @@ using conda, you can create a new virtual environment easily using
 `conda activate JunoPy-env`), you can enter the JunoPy directory and 
 install JunoPy using `pip`. 
 
-        pip install .
+        $ pip install .
 
     If you wish to edit the core of JunoPy, you can use the `-e` flag during
     installation. This indicates that the package is editable and any changes
     made to the package after installation will take effect immediately.
 
-        pip install -e .
+        $ pip install -e .
 
 3. With JunoPy successfully installed, all you need to do to use it is import 
 it into your code and use it. 
@@ -43,7 +43,7 @@ it into your code and use it.
         from JunoPy import jade
         ...
 
-## Usage Example
+## Usage
 
 After installation, it is useful to first create a project directory that will
 store all data files and scripts. I find it useful to separate JunoPy's core 
@@ -52,7 +52,7 @@ e.g. `project`. I also recommend creating separate directories in the project
 directory to store the `data` and `spice` kernels. All this can be done either 
 manually or by using the Makefile that is provided in the top-level directory.  
 
-    make project
+    $ make project
 
 This will create a new directory called `project` which you can move and 
 rename as necessary.  
@@ -61,10 +61,41 @@ Using the Makefile is not necessary, you can also `cd` into a directory of
 your choosing and run the following commands. The important thing is that there
 needs to be a `data` and `spice` directory to store data.
 
-    mkdir -p project/data
-	mkdir project/spice
+    $ mkdir -p project/data
+	$ mkdir -p project/spice/kernels
 
-### 1. Downloading Data
+### 1. Downloading SPICE kernels  
+
+First it is a good idea to download the SPICE kernels relevant to Juno. This 
+is achieved by running the `download_spice_kernels` method defined in the 
+`spice` module. E.g. save the following in a new script `download_data.py`.
+
+    from JunoPy import spice
+    spice.download_spice_kernels(dodownload=True)
+
+Run this script within the `project` folder.
+This method uses the `urllib.request` module to open the SPICE NAIF and access
+the data via `https`. It downloads only the latest kernels from the `fk`, `pck`,
+`lsk`, and `sclk` directories, and the *reconstructed* `spk` trajetory kernels 
+between years 2016-2025. It creates a list of these kernels and downloads them
+to the `spice/kernels` directory in the project folder. It will also create a 
+meta kernel file called `JunoMetaKernel.txt` in the `spice` directory
+with a list of these kernels. 
+
+    $ cd project
+    $ python download_data.py
+
+And you should get a directory structure like so -  
+
+    project  
+    ├── data
+    ├── download_data.py
+    └── spice
+        ├── JunoMetaKernel.txt
+        └── kernels
+
+
+### 2. Downloading Data  
 
 JunoPy downloads data from the [PDS](https://pds-ppi.igpp.ucla.edu/index.jsp) 
 by examining the `INDEX.TAB` files that are associated with each dataset. This 
@@ -79,7 +110,19 @@ object. E.g.,
     magindex = index.IndexFile(dataset='mag', dodownload=True)
 
 The `magindex` object contains the information stored in the magnetometer's 
-`INDEX.TAB` file. Now, we can call a method to download data between two dates
+`INDEX.TAB` file. It stored the index file as a .csv in the `index` folder.
+
+    project
+    ├── data
+    ├── download_data.py
+    ├── index
+    │   ├── index_mag.csv
+    └── spice
+        ├── JunoMetaKernel.txt
+        └── kernels
+  
+The `magindex` object contains a `pd.DataFrame` that has all the tabular data 
+from `INDEX.TAB`. Now, we can call a method to download data between two dates
 stored as `datetime.datetime`. 
 
     import datetime as dt
@@ -101,11 +144,7 @@ my local hard drive, but not for the plasma instruments as their
 data files are much larger and can easily fill all available disk space. There 
 are some methods provided in the `jade.py` and `jedi.py` modules that can fetch
 relevant data for you on demand, or you can use the above logic to implement 
-your own workflow. 
-
-### 2. Downloading SPICE kernels
-
-
+your own workflow.  
 
 ### 3. Reading Data
 

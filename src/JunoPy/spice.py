@@ -7,18 +7,19 @@ import os
 import re
 import numpy as np
 import datetime as dt
-import pandas as pd
 import spiceypy as spice
-import ftplib
 import urllib
-import JupiterMag
 
-from JunoPy.download import download_file, download_multiple_files, download_file
+from JunoPy.download import download_multiple_files, download_file
 from contextlib import ContextDecorator
+
+R_JUPITER = 71492    # km
+R_GANYMEDE = 2634    # km
 
 SPICE_DIR = 'spice'
 KERNEL_DIR = os.path.join(SPICE_DIR, 'kernels')
-JUNO_SPICE_URL = "https://naif.jpl.nasa.gov/pub/naif/pds/data/jno-j_e_ss-spice-6-v1.0/jnosp_1000/"
+JUNO_SPICE_URL = "https://naif.jpl.nasa.gov/" + \
+                 "pub/naif/pds/data/jno-j_e_ss-spice-6-v1.0/jnosp_1000/"
 METAFILE = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
 
 
@@ -36,13 +37,6 @@ class withspiceloaded(ContextDecorator):
 
 def download_juno_kernels(doDownload=True):
     """Downloads all relevant Juno related SPICE kernels into a directory."""
-    
-    # kernel_urls = [
-    #     'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/fk/juno_v12.tf',
-    #     'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/lsk/naif0012.tls',
-    #     'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/pck/pck00010.tpc',
-    #     'https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/sclk/JNO_SCLKSCET.00151.tsc',    
-    # ]
 
     URL_TOP = "https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/"
     
@@ -92,11 +86,16 @@ def download_juno_kernels(doDownload=True):
             'spk_rec' in f[:7]:
             kernel_urls.append(
                 URL_TOP + 'spk/' + f + '.bsp')
+            
+    # Add the PhiO coordinate system kernel
+    kernel_urls.append(
+        URL_TOP + '../misc/jszalay/juno_phi_o_v1.tf')
                 
     if doDownload:
         print("Downloading SPICE kernels ...")
 
         for url in kernel_urls:
+            print(url)
             download_file(
                 url, 
                 os.path.join(SPICE_DIR, 'kernels', os.path.split(url)[-1]))
@@ -115,16 +114,13 @@ def download_juno_kernels(doDownload=True):
         f.write(")\n")
         f.write("\\begintext\n")
 
+
 @withspiceloaded()
 def get_juno_position(times, coordsystem='JUNO_JSS', center='JUPITER'):
     """
     Fetch juno position for a list of spacecraft times.
     Input should be in datetime.
     """
-    # metafile = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
-    # spice.furnsh(metafile)
-    # spice.furnsh(os.path.join(SPICE_DIR, 'kernels', 'juno_phi_o_v1.tf'))
-    
     times_converted = []
     for time in times:
         times_converted.append(
@@ -136,15 +132,11 @@ def get_juno_position(times, coordsystem='JUNO_JSS', center='JUPITER'):
     spice.kclear()
     
     if 'JUPITER' in center:
-        position = np.asarray(position) / 71492
+        position = np.asarray(position) / R_JUPITER
     elif '503' in center or 'GANYMEDE' in center:
-        position = np.asarray(position) / 2634
-
-    # spice.unload(metafile)
-    # spice.unload(os.path.join(SPICE_DIR, 'kernels', 'juno_phi_o_v1.tf'))
+        position = np.asarray(position) / R_GANYMEDE
 
     return position, lightTimes
-
 
 
 @withspiceloaded()
@@ -161,17 +153,3 @@ def get_ganymede_pos(time, coordsystem='IAU_JUPITER'):
     spice.kclear()
     
     return position / 71492
-
-
-def spice_load_kernels():
-    """Load SPICE kernels into cache (?)"""
-    metafile = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
-    spice.furnsh(metafile)
-    spice.furnsh(os.path.join(SPICE_DIR, 'kernels', 'juno_phi_o_v1.tf'))
-
-
-def spice_unload_kernels():
-    """Unload SPICE kernels."""
-    metafile = os.path.join(SPICE_DIR, 'JunoMetaKernel.txt')
-    spice.unload(metafile)
-    spice.unload(os.path.join(SPICE_DIR, 'kernels', 'juno_phi_o_v1.tf'))

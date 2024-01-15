@@ -12,8 +12,10 @@ import datetime as dt
 import pandas as pd
 import numpy as np
 
-from JunoPy.library import DATASETS, PDS_URL, EXTENSIONS, TIMEFORMAT
-from JunoPy.download import download_file, download_multiple_files
+from pathlib import Path, PosixPath
+from JunoPy import download
+from JunoPy.library import DATA_ID, PDS_URL, EXTENSIONS, TIMEFORMAT
+
 
 class IndexFile(object):
     """
@@ -25,28 +27,25 @@ class IndexFile(object):
                         (mag/waves-survey/jedi, Default - '').
     """
 
-    outfolder = 'index'
+    outfolder = Path('index')
 
-    def __init__(self, dataset='', dodownload=False):
+    def __init__(self, dataset='', doDownload=False):
 
         if dataset:
             self.dataset = dataset
-            self.url = PDS_URL + DATASETS[dataset] + '/INDEX/INDEX.TAB'
+            self.url = PDS_URL + DATA_ID[dataset] + '/INDEX/INDEX.TAB'
         else:
             raise Exception('Specify dataset.')
         
-        if not os.path.exists(self.outfolder):
-            os.mkdir(self.outfolder)
+        self.outfolder.mkdir(parents=True, exist_ok=True)
             
-        if not os.path.exists(
-            os.path.join(self.outfolder, 
-                         'index_{:s}.csv'.format(self.dataset))) or dodownload:
-            print('Downloading index file...')
+        indexfile = self.outfolder / f"index_{self.dataset}.csv"
+        
+        if not indexfile.exists() or doDownload:
+            print('Downloading index file ...')
             self.download_index_file()
             
-        self.filename = os.path.join(
-            self.outfolder, 'index_{:s}.csv'.format(self.dataset))
-        
+        self.filename = str(indexfile)
         
         self.parse_index_file()
 
@@ -55,14 +54,14 @@ class IndexFile(object):
         """
         Downloads the index file from PDS for the specified dataset.
         """
-        
-        outfile = os.path.join(self.outfolder, 'INDEX.TAB')
-        download_file(self.url, os.path.join(self.outfolder, 'INDEX.TAB'))
-        assert(os.path.exists(outfile))
+        outfile = self.outfolder / 'INDEX.TAB'
 
-        os.rename(
-            os.path.join(self.outfolder, 'INDEX.TAB'),
-            os.path.join(self.outfolder, 'index_{:s}.csv'.format(self.dataset))) 
+        download.download_file(self.url, str(outfile))
+
+        assert(outfile.exists())
+
+        outfile = outfile.rename(
+            self.outfolder / f"index_{self.dataset}.csv") 
 
 
     def parse_index_file(self):
@@ -95,7 +94,10 @@ class IndexFile(object):
     def get_files_between_dates(
         self, startdate, enddate, 
         sid='', 
-        DoDownload=False, outfolder=None, getLBL=False):
+        doDownload=False, 
+        outfolder=None, 
+        getLBL=False,
+        doMultiprocessing=False):
         """
         Given two dates, find all index files corresponding to time between.
         
@@ -115,7 +117,11 @@ class IndexFile(object):
             df_masked = df[df['SID'].str.contains(sid)]
         
         if not outfolder:
-            outfolder = os.path.join('data', self.dataset)
+            outfolder = Path('data') / self.dataset
+        else:
+            outfolder = Path(outfolder)
+
+        outfolder.mkdir(parents=True, exist_ok=True)
 
         # Ignore unwanted files from waves
         if self.dataset == 'waves-survey':
@@ -123,11 +129,12 @@ class IndexFile(object):
                 df_masked = df_masked[
                     ~df_masked['PRODUCT_ID'].str.contains(s)]
 
-        # print(df_masked.info())
-        filelist = []
-  
+        # New version with pathlib
+        relevantFileUrls = []
+        relevantFileOutNames = []
+
         for _, row in df_masked.iterrows():
-            
+
             doAppend = False
             
             if (np.abs((startdate - row['START_TIME']).total_seconds()) < \
@@ -140,47 +147,63 @@ class IndexFile(object):
                 
             if (row['START_TIME'] > startdate and row['STOP_TIME'] < enddate):
                 doAppend = True
-                
+
             if doAppend:
-                filelist.append(row['FILE_SPECIFICATION_NAME'].strip())
-                
 
-        # filelist = [x.strip() for x in df_masked['FILE_SPECIFICATION_NAME']]
-        # print(startdate, enddate, filelist) # filelist)
+                fileurl = PosixPath(
+                    row['FILE_SPECIFICATION_NAME'].strip()
+                    ).with_suffix(EXTENSIONS[self.dataset])
+                
+                relevantFileUrls.append(
+                    PosixPath(PDS_URL) \
+                    / DATA_ID[self.dataset] \
+                    / fileurl)
+                
+                relevantFileOutNames.append(
+                    outfolder \
+                    / Path(row['START_TIME'].strftime('%Y')) \
+                    / Path(row['START_TIME'].strftime('%j')) \
+                    / fileurl.name 
+                )
         
-        if DoDownload and len(filelist) > 0:
-            urls = []
+        if not doDownload:
+            return relevantFileOutNames
+    
+        if not relevantFileUrls:
+            print("No relevant files to download from the PDS for the"
+                  " selected time.")
+            return relevantFileOutNames
 
-            for f in filelist:
+        # Create list of files actually to be downloaded
+        downloadFileUrls = []
+        downloadFileOutNames = []
 
-                # urls.append(PDS_URL + DATASETS[self.dataset] + '/' + \
-                #            f[:-4] + EXTENSIONS[self.dataset])
-                
-                print('Downloading file - {:s}'.format(f[:-4]))
+        for url, fOut in zip(relevantFileUrls, relevantFileOutNames):
 
-                
-                downfile = os.path.join(
-                    outfolder, 
-                    f[:-4].split('/')[-1] + EXTENSIONS[self.dataset])
+            # First we check if file exists
+            if Path(fOut).exists(): continue
+            if Path(fOut.with_suffix('.hdf5').exists()): continue
 
-                if not os.path.exists(downfile):
+            fOut.parent.mkdir(parents=True, exist_ok=True)
 
-                    download_file(
-                        PDS_URL + DATASETS[self.dataset] + '/' + \
-                        f[:-4] + EXTENSIONS[self.dataset],
-                        downfile)
+            downloadFileOutNames.append(fOut)
+            downloadFileUrls.append(url)
 
-                if getLBL:
-                    
-                    downfile = os.path.join(outfolder, f.split('/')[-1])
-                    download_file(
-                        PDS_URL + DATASETS[self.dataset] + '/' + \
-                        f,
-                        downfile)
+            if getLBL:
+                downloadFileOutNames.append(fOut.with_suffix('.LBL'))
+                downloadFileUrls.append(url.with_suffix('.LBL'))
 
-            # download_multiple_files(
-            #     urls, outfolder=os.path.join('data', self.dataset))
-            
-            
 
-        return filelist
+        if not downloadFileUrls:
+            print(f"Files already exist. Nothing to download. ({self.dataset})")
+            return relevantFileOutNames
+
+        if doMultiprocessing:
+            download.download_multiple_files(
+                downloadFileUrls, downloadFileOutNames)
+        else:
+            for url, fOut in zip(downloadFileUrls, downloadFileUrls):
+                print('Downloading to file - {:s}'.format(fOut))
+                download.download_file(url, fOut)
+        
+        return relevantFileOutNames

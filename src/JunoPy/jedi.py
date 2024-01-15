@@ -49,7 +49,7 @@ class JediData:
         self.nEbins   = kwargs.pop('nEbins', 20)
         self.nPAbins  = kwargs.pop('nPAbins', 18)
         self.start    = kwargs.pop('start', None)
-        self.end      = kwargs.pop('end', None)
+        self.stop     = kwargs.pop('stop', None)
         self.nEQPAbins = kwargs.pop('nEQPAbins', 9)
         self.dosaveonly = kwargs.pop('dosaveonly', False)
         self.docalcCX   = kwargs.pop('docalcCX', False)
@@ -71,10 +71,10 @@ class JediData:
         else:
             self._filter_metadata()
 
-        if self.start and self.end:
+        if self.start and self.stop:
             self.df_raw = self.df_raw.loc[
                 self.start.strftime('%Y-%m-%d %H:%M:%S'):
-                self.end.strftime('%Y-%m-%d %H:%M:%S')]
+                self.stop.strftime('%Y-%m-%d %H:%M:%S')]
             
         self.mask_invalid_pa()
 
@@ -743,11 +743,11 @@ def jedi_merge(j1, j2):
     assert (j1.dbfile == j2.dbfile)       ; j3.dbfile = j1.dbfile
     assert (j1.nEbins == j2.nEbins)       ; j3.nEbins = j1.nEbins
     assert (j1.nPAbins == j2.nPAbins)     ; j3.nPAbins = j1.nPAbins
-    assert (j1.start == j2.start and j1.end == j2.end)
+    assert (j1.start == j2.start and j1.stop == j2.stop)
     assert (j1.nEQPAbins == j2.nEQPAbins) ; j3.nEQPAbins = j1.nEQPAbins
 
     j3.start = j1.start
-    j3.end = j1.end
+    j3.stop = j1.stop
 
     j3.energybins = j1.energybins
     j3.pitchanglebins = j1.pitchanglebins
@@ -790,11 +790,11 @@ def get_jedi_data(**kwargs):
         idstring = 'NONPTOFXER'
 
     datafolder = kwargs.pop('datafolder', 'data/jedi/')
-    sensor = kwargs.pop('sensor', [])
+    sensor = kwargs.pop('sensor', ['JED_090', 'JED_270', 'JED_180'])
 
     AllData = []
 
-    for day in pd.date_range(kwargs['start'], kwargs['end']):
+    for day in pd.date_range(kwargs['start'], kwargs['stop']):
 
         dataFiles = glob.glob(
             datafolder + \

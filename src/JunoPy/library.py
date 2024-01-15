@@ -26,11 +26,12 @@ import shutil
 from JunoPy.spice import get_juno_position, withspiceloaded
 
 
-R_JUPITER = 71492
+R_JUPITER = 71492    # km
+R_GANYMEDE = 2634    # km
 
 PDS_URL = 'https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/'
 
-DATASETS = {
+DATA_ID = {
     'mag': 'JNO-J-3-FGM-CAL-V1.0',
     'waves-burst': 'JNO-E_J_SS-WAV-3-CDR-BSTFULL-V1.0',
     'waves-survey': 'JNO-E_J_SS-WAV-3-CDR-SRVFULL-V2.0',

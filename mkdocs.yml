@@ -4,11 +4,11 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Modules:
-    - Magnetometer: data/magnetometer.md
-    - Waves: data/waves.md
-    - JEDI: data/jedi.md
-    - JADE: data/jade.md
-    - Auxiliary: data/auxiliary.md
+    - Magnetometer: modules/magnetometer.md
+    - Waves: modules/waves.md
+    - JEDI: modules/jedi.md
+    - JADE: modules/jade.md
+    - Auxiliary: modules/auxiliary.md
   - About: 
     - License: about/license.md
     - Release Notes: about/release-notes.md
@@ -17,9 +17,9 @@ nav:
 theme:
   name: "mkdocs"
 
-plugins:
-- search
-- mkdocstrings
+# plugins:
+# - search
+# - mkdocstrings
 
-markdown-extensions:
-  - smarty
+# markdown-extensions:
+#   - smarty

@@ -29,7 +29,7 @@ from JunoPy.spice import get_juno_position, withspiceloaded
 R_JUPITER = 71492    # km
 R_GANYMEDE = 2634    # km
 
-PDS_URL = 'https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/'
+PDS_URL = 'https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI'
 
 DATA_ID = {
     'mag': 'JNO-J-3-FGM-CAL-V1.0',
@@ -287,7 +287,7 @@ def find_ticks_between_deltaAlfven(
             'Time   {:s}'.format(time_array[i].strftime(timeformat)) + '\n' +
             'M     {:7.2f}'.format(M) + '\n' +
             'MLat   {:7.2f}'.format(mlat) + '\n' +
-            '$\Delta\lambda$   {:7.2f}'.format(dAlfven[i]))
+            r'$\Delta\lambda$   {:7.2f}'.format(dAlfven[i]))
         else:
             tickstring.append(
                 time_array[i].strftime(timeformat) + '\n' +

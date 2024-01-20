@@ -33,7 +33,7 @@ class IndexFile(object):
 
         if dataset:
             self.dataset = dataset
-            self.url = PDS_URL + DATA_ID[dataset] + '/INDEX/INDEX.TAB'
+            self.url = PDS_URL + '/' + DATA_ID[dataset] + '/INDEX/INDEX.TAB'
         else:
             raise Exception('Specify dataset.')
         
@@ -69,6 +69,7 @@ class IndexFile(object):
         Read in the index file. PDS has conveniently chosen to use comma
         separated values.
         """
+        print('Parsing index file ...')
         columns = ['VOLUME_ID', 'SID', 'DATA_SET_ID', 'PRODUCT_ID', 'START_TIME',
            'STOP_TIME', 'FILE_SPECIFICATION_NAME', 'CR_DATE',
            'PRODUCT_LABEL_MD5CHECKSUM']
@@ -90,9 +91,8 @@ class IndexFile(object):
 
         self.df = index
 
-
     def get_files_between_dates(
-        self, startdate, enddate, 
+        self, start, stop, 
         sid='', 
         doDownload=False, 
         outfolder=None, 
@@ -101,8 +101,8 @@ class IndexFile(object):
         """
         Given two dates, find all index files corresponding to time between.
         
-        :param startdate: Start time for the needed interval.
-        :param enddate: End time for the needed interval. 
+        :param start: Start time for the needed interval.
+        :param stop: End time for the needed interval. 
         :param str sid: SID is a string that desribes different data in the 
                         the same `INDEX` file. For e.g. magnetometer data with
                         60 s resolution has '60s' appended to the filename
@@ -136,34 +136,31 @@ class IndexFile(object):
         for _, row in df_masked.iterrows():
 
             doAppend = False
-            
-            if (np.abs((startdate - row['START_TIME']).total_seconds()) < \
+
+            if (np.abs((start - row['START_TIME']).total_seconds()) < \
                 np.abs(dt.timedelta(hours=24).total_seconds())):
                 doAppend = True
                 
-            if (np.abs((enddate - row['STOP_TIME']).total_seconds()) < \
+            if (np.abs((stop - row['STOP_TIME']).total_seconds()) < \
                 np.abs(dt.timedelta(hours=24).total_seconds())):
                 doAppend = True
                 
-            if (row['START_TIME'] > startdate and row['STOP_TIME'] < enddate):
+            if (row['START_TIME'] > start and row['STOP_TIME'] < stop):
                 doAppend = True
 
             if doAppend:
 
-                fileurl = PosixPath(
-                    row['FILE_SPECIFICATION_NAME'].strip()
-                    ).with_suffix(EXTENSIONS[self.dataset])
+                fileurl = row['FILE_SPECIFICATION_NAME'].strip()[:-4] \
+                          + EXTENSIONS[self.dataset]
                 
                 relevantFileUrls.append(
-                    PosixPath(PDS_URL) \
-                    / DATA_ID[self.dataset] \
-                    / fileurl)
+                    PDS_URL + '/' + DATA_ID[self.dataset] + '/' + fileurl)
                 
                 relevantFileOutNames.append(
                     outfolder \
                     / Path(row['START_TIME'].strftime('%Y')) \
                     / Path(row['START_TIME'].strftime('%j')) \
-                    / fileurl.name 
+                    / fileurl.split('/')[-1]
                 )
         
         if not doDownload:
@@ -181,8 +178,11 @@ class IndexFile(object):
         for url, fOut in zip(relevantFileUrls, relevantFileOutNames):
 
             # First we check if file exists
-            if Path(fOut).exists(): continue
-            if Path(fOut.with_suffix('.hdf5').exists()): continue
+            if Path(fOut).exists(): 
+                continue
+
+            if Path(fOut.with_suffix('.hdf5')).exists(): 
+                continue
 
             fOut.parent.mkdir(parents=True, exist_ok=True)
 
@@ -191,19 +191,22 @@ class IndexFile(object):
 
             if getLBL:
                 downloadFileOutNames.append(fOut.with_suffix('.LBL'))
-                downloadFileUrls.append(url.with_suffix('.LBL'))
-
+                downloadFileUrls.append(url[:-4] + ".LBL")
 
         if not downloadFileUrls:
             print(f"Files already exist. Nothing to download. ({self.dataset})")
             return relevantFileOutNames
+        else:
+            print(f"{len(downloadFileUrls)} files to download ...")
+
+        downloadFileOutNames = [str(x) for x in downloadFileOutNames]
 
         if doMultiprocessing:
             download.download_multiple_files(
                 downloadFileUrls, downloadFileOutNames)
         else:
-            for url, fOut in zip(downloadFileUrls, downloadFileUrls):
-                print('Downloading to file - {:s}'.format(fOut))
+            for url, fOut in zip(downloadFileUrls, downloadFileOutNames):
+                print('Downloading to file - {:s}'.format(str(fOut), url))
                 download.download_file(url, fOut)
         
         return relevantFileOutNames

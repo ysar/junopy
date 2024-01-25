@@ -4,7 +4,7 @@ model and the CON2020 current sheet model.
 """
 import os
 import numpy as np
-import con2020
+# import con2020
 import scipy
 import JupiterMag
 

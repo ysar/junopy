@@ -1,7 +1,9 @@
+import os
 import datetime as dt
 import numpy as np
 import pandas as pd
 import copy
+import spiceypy
 
 from pathlib import Path
 from JunoPy import spice
@@ -30,8 +32,9 @@ class MagData(object):
             else:
                 self.filename = filename
                 self.parse_mag_file()
+                self.convert_to_hdf()
         
-        if start and end:
+        if start and stop:
             self.df = self.df.loc[start: stop].copy()
 
         if coordsystem:
@@ -100,6 +103,16 @@ class MagData(object):
 
         self.df['Bmag'] = np.sqrt(
             self.df['Bx']**2 + self.df['By']**2 + self.df['Bz']**2)
+        
+
+    def read_hdf(self):
+        return pd.read_hdf(self.filename)
+    
+    def convert_to_hdf(self):
+        assert('.sts' in self.filename)
+        self.df.to_hdf(self.filename[:-4] + '.hdf5', 'data')
+        os.remove(self.filename)
+        self.filename = self.filename[:-4] + '.hdf5'
 
 
     def convert_to_spherical(self, usemagcoords=True):
@@ -150,8 +163,8 @@ class MagData(object):
 
         def tmp_func_convert(row, outCoord=outCoord):
 
-            time = spice.str2et(row.name.strftime('%Y-%m-%dT%H:%M:%S.%f'))
-            R = spice.pxform(self.coordsystem, outCoord, time)
+            time = spiceypy.str2et(row.name.strftime('%Y-%m-%dT%H:%M:%S.%f'))
+            R = spiceypy.pxform(self.coordsystem, outCoord, time)
             B = np.array([row['Bx'], row['By'], row['Bz']])
             X = np.array([row['X'], row['Y'], row['Z']])
 
@@ -246,12 +259,13 @@ def get_mag_data(
         start, stop, 
         doDownload=True,
         sid=sid, outfolder=datafolder)
-    
-    for f in files:
-        if not Path(f[:-4] + '.hdf5').exists():
-            pass
 
-    files = [x[:-4] + '.hdf5' for x in files]
+    for f in files:
+        if not f.with_suffix('.hdf5').exists():
+            print('Converting .sts MAG files to .HDF5 ... ')
+            _ = MagData(filename=str(f))
+
+    files = [str(x.with_suffix('.hdf5')) for x in files]
 
     magdatalist = []
 

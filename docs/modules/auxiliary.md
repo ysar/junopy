@@ -35,10 +35,11 @@ the object.
         getLBL=True
     )
 
-    Where `start` and `stop` are expected of type `dt.Datetime`. `sid` is a 
-    unique identifier that is defined for a particular data type, e.g. for the 
-    magnetometer `"SS_1_SECOND"` is an identifier for 1 s cadence magnetometer
-    data in the Jovian Sun-State (JSS) coordinate system. Different datasets
-    and repositories use different identifiers to separate different kinds of 
-    data. A table of different `sid` values for each data type is given along 
-    with 
+Where `start` and `stop` are expected of type `dt.Datetime`. `sid` is a 
+unique identifier that is defined for a particular data type, e.g. for the 
+magnetometer `"SS_1_SECOND"` is an identifier for 1 s cadence magnetometer
+data in the Jovian Sun-State (JSS) coordinate system. Different datasets
+and repositories use different identifiers to separate different kinds of 
+data. A table of different `sid` values for each data type is provided in
+each of the module sections.
+

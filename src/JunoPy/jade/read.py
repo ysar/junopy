@@ -16,13 +16,19 @@ The above example reads a file with the .DAT.gz expansion (compressed), but
 reading the .DAT (uncompressed) file is also possible.
  
 """
-
+import datetime as dt
 import numpy as np
 import pandas as pd
 import struct
 import re
 import gzip
 
+from matplotlib import pyplot as plt
+from matplotlib import colors
+from numpy import ma
+
+from JunoPy import mag
+from .calib import get_Geff_electrons
 
 def open_file(filename, *args):
     if '.gz' == filename[-3:]:
@@ -99,7 +105,6 @@ def _read_jade_bytes(filename, dfLabel, nRecords):
         Currently, this is stored as a 1D array with size `(m*n)` (it is 
         reshaped later).
     """
-    
     data = pd.DataFrame(columns=dfLabel['name'].to_list())
 
     # We will create numpy arrays to store data and then copy over the array to
@@ -121,6 +126,7 @@ def _read_jade_bytes(filename, dfLabel, nRecords):
     f = open_file(filename, 'rb')
 
     i = 0
+
     while True:
         for j in range(len(dfLabel)):
             readdata = f.read(nbytes[j])
@@ -134,8 +140,8 @@ def _read_jade_bytes(filename, dfLabel, nRecords):
             datadict[names[j]][i] = struct.unpack(f'{n[j]}{fmt[j]}', readdata)
             
         i += 1
-
     
+
 def read_jade_binary_file(filename):
     """
     Reads the JADE .DAT file into a single pandas DataFrame. This method assumes
@@ -152,10 +158,11 @@ def read_jade_binary_file(filename):
             .LBL files.
     """
     if filename[-3:] == '.gz':
-        
-        lblfile = filename[:-7] + '.LBL.gz'
+        lblfile = filename[:-7] + '.LBL'
     else:
         lblfile = filename[:-4] + '.LBL'
+
+    print(lblfile)
 
     dfLabel, nRecords = read_jade_lbl_file(lblfile)
     
@@ -175,3 +182,353 @@ def read_jade_binary_file(filename):
             df[column['name']] = df[column['name']].apply(lambda x: x[0])
 
     return df
+
+
+
+    # Return numpy array for compatibility with IDL
+    datadict = {}
+    for key in df.keys():
+        datadict[key] = np.stack(df[key])
+
+    return datadict
+
+
+class JadeData(object):
+    """
+    This class reads in the JADE data from the .gz compressed files. It works 
+    roughly like this - 
+    1. Extract bytes from .gz file
+    2. Read in bytes to a dictionary with each key corresponding to the column
+       label
+    3. Interprets this dictionary to make pitch angle and energy time spectra
+    """
+    hasEQPAD = False
+    hasValidData = False
+    hasCXrate = False
+    hasEflux = False
+
+    def __init__(self, **kwargs):
+        
+        self.filename = kwargs.pop('filename', None)
+        if not self.filename:
+            return None
+
+        self.magfolder = kwargs.pop('magfolder', 'data/mag')
+        self.efilter   = kwargs.pop('efilter', None)
+        self.dtbin     = kwargs.pop('dtbin', dt.timedelta(seconds=120))
+        # self.nEbins    = kwargs.pop('nEbins', 20)    # Decrepated for now
+        self.nPAbins   = kwargs.pop('nPAbins', 12)
+        self.units     = kwargs.pop('units', 'PSD')
+        self.calcEflux = kwargs.pop('calcEflux', False)
+        self.paMin     = kwargs.pop('paMin', 0)
+        self.paMax     = kwargs.pop('paMax', 180)
+
+        self.read_binary_file()
+        self.calc_pitchangles()
+        self.Geff = get_Geff_electrons(
+            self.data_raw['DIM1_E'], self.times, self.data_raw['DIM2_ELEVATION'])
+        
+        # self.convert_to_units()
+        
+        self.hasValidData = True
+        self.calc_energy_spectra()
+        self.calc_pa_spectra()
+
+        if self.calcEflux:
+            self.calc_energy_flux(
+                pa1=self.paMin, pa2=self.paMax)
+            
+        # self.resample()
+
+        
+    def read_binary_file(self):
+        # Read the binary files
+        df = read_jade_binary_file(self.filename)
+        self.data_raw = {}
+        for key in df.keys():
+            self.data_raw[key] = np.stack(df[key]).T
+            # if self.data_raw[key].ndim > 1:
+            #     self.data_raw[key] = self.data_raw[key].T
+    
+        self.times = pd.Series(
+            map(lambda x: dt.datetime.strptime(x, '%Y-%jT%H:%M:%S.%f'), 
+                self.data_raw['DIM0_UTC']))
+        
+        self.data_raw['DATA'][self.data_raw['DATA'] < -999990] = np.NaN
+        self.data_raw['DATA'][
+            (self.data_raw['DATA'] > -999990) & 
+            (self.data_raw['DATA'] < 0)] = np.NaN
+        
+        self.data_sigma = self.data_raw['DATA_SIGMA']
+
+
+    def calc_pitchangles(self):
+        """
+        Calculate pitch angles from the azimuth and elevation values.
+        """
+        print('Calculating pitch angles ...')
+        elevation = self.data_raw['DIM2_ELEVATION'] * np.pi / 180
+        azimuth   = self.data_raw['DIM2_AZIMUTH_DESPUN'] * np.pi / 180
+
+        # Get magnetometer data for pitch angle calculations
+        magdata = mag.get_mag_data(
+            self.times.iloc[0], self.times.iloc[-1], 
+            datafolder=self.magfolder, coordsystem='Juno_JADE_despun')
+
+        # Interpolate MAG data onto times for JADE
+        df = pd.DataFrame(index=self.times, columns=['Bx', 'By', 'Bz'])
+        print("interpolating mag data ...")
+        for t, _ in df.iterrows():
+            df.loc[t, :] = magdata.df.loc[
+                t - dt.timedelta(seconds=0.6):
+                t + dt.timedelta(seconds=0.6), 
+                ['Bx', 'By', 'Bz']].mean(axis=0).values
+
+        Bx = df['Bx'].values.astype('float')
+        By = df['By'].values.astype('float')
+        Bz = df['Bz'].values.astype('float')
+
+        Bmag = np.sqrt(Bx**2 + By**2 + Bz**2)
+        Bx /= Bmag; By /= Bmag; Bz /= Bmag
+
+        self.data_raw['PITCH_ANGLE'] = np.arccos(-(
+            np.cos(elevation) * np.cos(azimuth) * Bx + \
+            np.cos(elevation) * np.sin(azimuth) * By + \
+            np.sin(elevation) * Bz)) * 180 / np.pi
+
+        self.pitchanglebins = np.linspace(0, 180, self.nPAbins + 1)
+
+
+    def calc_energy_spectra(self):
+        """
+        Calculate the energy spectra.
+        """
+        print('Calculating energy spectra ...')
+        energies = self.data_raw['DIM1_E']
+        flux = self.data_raw['DATA']
+        pitchangles = self.data_raw['PITCH_ANGLE']
+
+
+        # Create energybins based on log-space intervals 
+        # (and)
+        # Filter out those energies requested for by user
+        energylin = energies[0, :, 0]
+
+        if self.efilter:
+            indices = np.asarray(
+                (energylin >= self.efilter[0]) & 
+                (energylin <= self.efilter[1])).nonzero()[0]
+
+            energies    = energies[:, indices, :]
+            pitchangles = pitchangles[:, indices, :]
+            flux        = flux[:, indices, :]
+            self.data_sigma = self.data_sigma[:, indices, :]
+            energylin   = energylin[indices]
+
+        self.energybins = np.zeros(len(energylin) + 1)
+        self.energybins[1:-1] = np.sqrt(energylin[:-1] * energylin[1:])
+        self.energybins[0] = self.energybins[1]**2 / self.energybins[2]
+        self.energybins[-1] = self.energybins[-2]**2 / self.energybins[-3]
+        self.nEbins = len(self.energybins) - 1
+        
+        nEorig = flux.shape[1]
+        nTimes = flux.shape[2]
+
+        # Mask invalid pitch angles
+        mask = ((pitchangles < self.paMin) | (pitchangles > self.paMax))
+        flux = ma.masked_where(mask, flux)
+
+        # Rebin from LookDirection to PitchAngle
+        flux_rebin = np.zeros((self.nPAbins, nEorig, nTimes))
+        
+        nanmask = np.isnan(flux)
+
+        for ii in range(self.nPAbins):
+            
+            mask = (self.pitchanglebins[ii] <= pitchangles) & \
+                   (self.pitchanglebins[ii+1]> pitchangles)
+            
+            flux_rebin[ii, :, :] = ma.masked_where(
+                ~mask | nanmask, flux).mean(axis=0).filled(np.NaN)
+
+        dPA = self.pitchanglebins[1] - self.pitchanglebins[0]
+        pitchanglemid = 0.5 * (
+            self.pitchanglebins[1:] + self.pitchanglebins[:-1])
+        
+        solidAngle = np.sin(pitchanglemid * np.pi / 180) *\
+                     np.sin(dPA * np.pi / 180 / 2) * 4 * np.pi
+
+        # We need to mask the nan values before averaging
+        mask = np.isnan(flux_rebin)
+        masked_arr = ma.masked_where(mask, flux_rebin)
+        self.data_pro = masked_arr.copy()
+
+        self.energytime = pd.DataFrame(
+            index=self.times,
+            columns=['Ebin_{:d}'.format(x) for x in range(self.nEbins)],
+            data=np.average(self.data_pro, axis=0).T)
+        
+        self.energytime_sigma = pd.DataFrame(
+            index=self.times,
+            columns=['Ebin_{:d}'.format(x) for x in range(self.nEbins)],
+            data=np.sqrt(np.nansum(self.data_sigma**2, axis=0)).T / flux.shape[0])
+            # Combine uncertainty over all look-directions
+
+        self.energytime = self.energytime\
+            .resample(self.dtbin, offset=self.dtbin/2)\
+            .agg(np.nanmean)
+        
+
+    def calc_pa_spectra(self):
+
+        print('Calculating pitch angle spectra ...')
+        
+        energybinsize = self.energybins[1:] - self.energybins[:-1]
+
+        self.pitchangletime = pd.DataFrame(
+            index=self.times,
+            columns=['PAbin_{:d}'.format(x) for x in range(self.nPAbins)],
+            data=np.average(self.data_pro, axis=1, weights=energybinsize).T)
+        
+        # When averagin over energy channels, weigh the data by the energy bin
+        # width.
+        # We need to swap axes to enable numpy broadcasting
+        # pasigma = np.swapaxes(self.data_sigma, 1, 2) * energybinsize
+        # pasigma = np.sqrt(np.nansum(pasigma**2, axis=2)) / np.sum(energybinsize)
+
+        # self.pitchangletime_sigma = pd.DataFrame(
+        #     index=self.times,
+        #     columns=['Ebin_{:d}'.format(x) for x in range(self.nEbins)],
+        #     data=pasigma.T
+        # )
+
+
+    def resample(self):
+        """
+        Resample the time-series DataFrames according to the dtbin specified 
+        by the user. 
+        """
+        
+
+        self.pitchangletime = self.pitchangletime\
+            .resample(self.dtbin, offset=self.dtbin/2)\
+            .agg(np.nanmean)
+        
+        if self.dbfile:
+            self.eqpad = self.eqpad\
+                .resample(self.dtbin, offset=self.dtbin/2)\
+                .agg(np.nanmean)
+
+        if self.hasCXrate:
+            self.cxrate = self.cxrate\
+                .resample(self.dtbin, offset=self.dtbin/2)\
+                .agg(np.nanmean)
+
+
+    def plot_spectra(
+        self, ax, data='Energy', donorm=False,
+        vmin=None, vmax=None, cmap=None, logplot=True,
+        label=None, zorder=1, plotcolorbar=True):
+        """
+        Generic method to plot a timeseries spectra.
+        """
+        if data == 'Energy':
+            ax.set_yscale('log')
+            ax.set_yticks([0.1, 1, 10])
+            df = self.energytime
+            bins = self.energybins / 1e3
+        elif data == 'PAD':
+            ax.set_yticks([0, 90, 180])
+            df = self.pitchangletime
+            bins = self.pitchanglebins 
+        
+        # x-data , shifted left by half of dtbin 
+        timearray = (df.index - self.dtbin / 2).to_pydatetime()
+        timearray = np.append(
+            timearray, timearray[-1] + (timearray[1] - timearray[0]))
+
+        # y-data is just bins 
+
+        # z-data is the values of the timeseries DataFrame (transposed)
+        z = df.values.T
+
+        def get_percentile(df, p):
+            return np.exp(np.percentile(np.log(df[df > 0].dropna()), p))
+    
+        if not vmin:
+            vmin = get_percentile(df, 1)
+        if not vmax:
+            vmax = get_percentile(df, 99)
+
+        if donorm:
+            z /= np.nanmean(z, axis=0)
+            
+        if logplot:
+            norm = colors.LogNorm(vmin=vmin, vmax=vmax)
+        else:
+            norm = colors.Normalize(vmin=vmin, vmax=vmax)
+
+        mp = ax.pcolormesh(
+            timearray, bins, z, norm=norm, cmap=cmap, zorder=zorder)
+
+        ax.set_ylim([bins[0], bins[-1]])
+
+        if plotcolorbar:
+            bbox = ax.get_position()
+            cax = ax.figure.add_axes(
+                [bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
+            cbar = ax.figure.colorbar(mp, cax=cax)
+
+        if label:
+            ax.text(0.1, 1.05, label, transform=ax.transAxes)
+
+        return ax, mp
+    
+
+
+    def plot_energy_vs_pitchangle_spectra(self, ax):
+        """
+        Plot energy vs pitch angle spectra for some time interval.
+        """
+        pass
+
+    
+
+    def calc_energy_flux(self, pa1=0, pa2=180):
+        """
+        Calculate the upward/downward energy flux based on the formula given
+        in Mauk et al. (2014).
+        """
+        midpa = 0.5 * (self.pitchanglebins[1:] + self.pitchanglebins[:-1])
+        condition = (midpa >= pa1) & (midpa <= pa2)
+        
+        solidAngle = 4 * np.pi * \
+            np.sin(
+                (self.pitchanglebins[:-1] + 
+                 self.pitchanglebins[1:]) * 0.5 * np.pi / 180) * \
+            np.sin(
+                (self.pitchanglebins[1] - 
+                 self.pitchanglebins[0]) * 0.5 * np.pi / 180)
+        
+        self.energyflux = pd.Series(index=self.times, data=0.)
+        for i in range(self.nEbins):
+            Eeff = np.sqrt(self.energybins[i] * self.energybins[i + 1])
+            dE = self.energybins[i + 1] - self.energybins[i]
+
+            # We need to convert (cm-2 . s-1 . keV-1 . sr-1) to (mW . m-2)
+            # This needs a 1e4 factor  and multiplication with e 
+            # = (1e4 to get from cm-2 to m-2) 
+            # * (1e-3 to get from keV-1 to eV-1)
+            # * (e to convert eV to J)
+            # * (1e3 to convert W to mW).
+
+            conversionfactor = \
+                solidAngle[condition] * Eeff * dE * e * 1e4
+        
+            self.energyflux += \
+                np.nansum(
+                    self.data_pro[condition, i, :].T * conversionfactor, axis=1)
+            
+            
+        self.energyflux[self.energyflux == 0] = np.NaN 
+        self.hasEflux = True

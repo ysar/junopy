@@ -97,7 +97,8 @@ class IndexFile(object):
         doDownload=False, 
         outfolder=None, 
         getLBL=False,
-        doMultiprocessing=False):
+        doMultiprocessing=False,
+        chunk=16 * 1024 * 1024):
         """
         Given two dates, find all index files corresponding to time between.
         
@@ -177,13 +178,16 @@ class IndexFile(object):
 
         for url, fOut in zip(relevantFileUrls, relevantFileOutNames):
 
-            # First we check if file exists
-            if Path(fOut).exists(): 
+            # First we check if file or its processed variants exist
+            if fOut.exists(): 
                 continue
 
-            if Path(fOut.with_suffix('.hdf5')).exists(): 
+            if fOut.with_suffix('.hdf5').exists(): 
                 continue
 
+            if fOut.with_suffix(fOut.suffix + '.gz').exists():
+                continue
+            
             fOut.parent.mkdir(parents=True, exist_ok=True)
 
             downloadFileOutNames.append(fOut)
@@ -203,10 +207,10 @@ class IndexFile(object):
 
         if doMultiprocessing:
             download.download_multiple_files(
-                downloadFileUrls, downloadFileOutNames)
+                downloadFileUrls, downloadFileOutNames, chunk=chunk)
         else:
             for url, fOut in zip(downloadFileUrls, downloadFileOutNames):
                 print('Downloading to file - {:s}'.format(str(fOut), url))
-                download.download_file(url, fOut)
+                download.download_file(url, fOut, CHUNK=chunk)
         
         return relevantFileOutNames

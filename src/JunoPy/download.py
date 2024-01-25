@@ -26,7 +26,7 @@ def download_file(url, outFile, CHUNK=16*1024*1024):
         print(80*'')
             
 
-def download_multiple_files(urls, outFiles):
+def download_multiple_files(urls, outFiles, dchunk=16*1024*1024):
     """
     Use :mod:`multiprocessing` to download multiple files at a time.
     
@@ -53,7 +53,9 @@ def download_multiple_files(urls, outFiles):
         
         for url, fOut in zip(urlsChunk, outFilesChunk):
             threads.append(
-                Thread(target=download_file, args=(url, fOut,)))
+                Thread(target=download_file, 
+                       args=(url, fOut,), 
+                       kwargs={'CHUNK': dchunk}))
             threads[-1].start()
             
         for t in threads:

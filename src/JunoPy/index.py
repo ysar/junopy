@@ -11,6 +11,7 @@ import os
 import datetime as dt
 import pandas as pd
 import numpy as np
+import logging
 
 from pathlib import Path, PosixPath
 from JunoPy import download
@@ -26,10 +27,7 @@ class IndexFile(object):
     :param str dataset: String describing the dataset. 
                         (mag/waves-survey/jedi, Default - '').
     """
-
-    outfolder = Path('index')
-
-    def __init__(self, dataset='', doDownload=False):
+    def __init__(self, dataset='', doDownload=False, outfolder=Path('index')):
 
         if dataset:
             self.dataset = dataset
@@ -37,12 +35,13 @@ class IndexFile(object):
         else:
             raise Exception('Specify dataset.')
         
+        logging.debug(f"Index file folder - {str(outfolder)}")
+        self.outfolder = Path(outfolder)
         self.outfolder.mkdir(parents=True, exist_ok=True)
             
         indexfile = self.outfolder / f"index_{self.dataset}.csv"
         
         if not indexfile.exists() or doDownload:
-            print('Downloading index file ...')
             self.download_index_file()
             
         self.filename = str(indexfile)
@@ -54,6 +53,8 @@ class IndexFile(object):
         """
         Downloads the index file from PDS for the specified dataset.
         """
+        logging.info(f'Downloading index file ({self.dataset.upper()}) ...')
+
         outfile = self.outfolder / 'INDEX.TAB'
 
         download.download_file(self.url, str(outfile))
@@ -69,7 +70,7 @@ class IndexFile(object):
         Read in the index file. PDS has conveniently chosen to use comma
         separated values.
         """
-        print('Parsing index file ...')
+        logging.info(f'Parsing index file ({self.dataset.upper()}) ...')
         columns = ['VOLUME_ID', 'SID', 'DATA_SET_ID', 'PRODUCT_ID', 'START_TIME',
            'STOP_TIME', 'FILE_SPECIFICATION_NAME', 'CR_DATE',
            'PRODUCT_LABEL_MD5CHECKSUM']
@@ -198,7 +199,8 @@ class IndexFile(object):
                 downloadFileUrls.append(url[:-4] + ".LBL")
 
         if not downloadFileUrls:
-            print(f"Files already exist. Nothing to download. ({self.dataset})")
+            logging.info(
+                f"Files already exist. Nothing to download. ({self.dataset})")
             return relevantFileOutNames
         else:
             print(f"{len(downloadFileUrls)} files to download ...")

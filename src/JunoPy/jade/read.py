@@ -22,6 +22,7 @@ import pandas as pd
 import struct
 import re
 import gzip
+import logging
 
 from matplotlib import pyplot as plt
 from matplotlib import colors
@@ -56,7 +57,7 @@ def read_jade_lbl_file(lblfile):
 
         for line in f:
             if 'FILE_RECORDS' in line:
-                nRecords = int(re.search('(\d+)', line)[0])
+                nRecords = int(re.search(r'(\d+)', line)[0])
                 break
         
         for line in f:
@@ -213,7 +214,7 @@ class JadeData(object):
         if not self.filename:
             return None
 
-        self.magfolder = kwargs.pop('magfolder', 'data/mag')
+        self.magfolder = kwargs.pop('magfolder', None)
         self.efilter   = kwargs.pop('efilter', None)
         self.dtbin     = kwargs.pop('dtbin', dt.timedelta(seconds=120))
         # self.nEbins    = kwargs.pop('nEbins', 20)    # Decrepated for now
@@ -222,6 +223,10 @@ class JadeData(object):
         self.calcEflux = kwargs.pop('calcEflux', False)
         self.paMin     = kwargs.pop('paMin', 0)
         self.paMax     = kwargs.pop('paMax', 180)
+
+        if not self.magfolder:
+            logging.error(
+            "%name: JadeData needs magfolder= keyword to calculate pitch angles.")
 
         self.read_binary_file()
         self.calc_pitchangles()
@@ -266,7 +271,7 @@ class JadeData(object):
         """
         Calculate pitch angles from the azimuth and elevation values.
         """
-        print('Calculating pitch angles ...')
+        logging.info('Calculating pitch angles ...')
         elevation = self.data_raw['DIM2_ELEVATION'] * np.pi / 180
         azimuth   = self.data_raw['DIM2_AZIMUTH_DESPUN'] * np.pi / 180
 

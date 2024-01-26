@@ -9,7 +9,7 @@ import urllib.error
 
 def download_file(url, outFile, CHUNK=16*1024*1024):
     """Opens a URL and downloads it's contents onto disk."""
-    tmpFile = os.path.join(os.environ['TMPDIR'], 'tmp-' + str(uuid.uuid4()))
+    tmpFile = os.path.join('/tmp/' + str(uuid.uuid4()))
     
     try:
         with urllib.request.urlopen(url) as g:

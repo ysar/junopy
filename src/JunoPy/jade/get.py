@@ -14,8 +14,6 @@ def get_jade_data_files(start, stop, **kwargs):
     """
     Return combined JADE low and high-res data.
     """
-    pass
-
     datafolder = kwargs.pop("datafolder", "data/jade/")
     getHRS = kwargs.pop("getHRS", True)
     getLRS = kwargs.pop("getLRS", True)
@@ -25,7 +23,7 @@ def get_jade_data_files(start, stop, **kwargs):
 
         relevantFiles = glob.glob(
             datafolder \
-            + day.strftime("%Y/%j%/") \
+            + day.strftime("/%Y/%j/") \
             + f"*{PATTERNS[datatype]}*.DAT.gz")
         
         if not getLRS:

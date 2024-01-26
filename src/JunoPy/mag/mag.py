@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import copy
 import spiceypy
+import logging
 
 from pathlib import Path
 from JunoPy import spice
@@ -26,6 +27,7 @@ class MagData(object):
         dataframe.
         """
         if filename:
+            logging.debug(f"Reading mag file - {filename}")
             if ishdf:
                 self.filename = filename
                 self.df = pd.read_hdf(filename)
@@ -74,6 +76,7 @@ class MagData(object):
         """
         Parse magnetometer file into a pandas dataframe.
         """
+        logging.debug(f"Parsing ASCII mag file - {self.filename}")
         nheader = self._count_header_lines()
 
         self.df = pd.read_csv(
@@ -109,6 +112,7 @@ class MagData(object):
         return pd.read_hdf(self.filename)
     
     def convert_to_hdf(self):
+        logging.debug(f"Converting file to HDF - {self.filename}")
         assert('.sts' in self.filename)
         self.df.to_hdf(self.filename[:-4] + '.hdf5', 'data')
         os.remove(self.filename)
@@ -120,6 +124,7 @@ class MagData(object):
         Calculate magnetic field values in spherical coordinates based
         on the XYZ location.
         """
+        logging.debug("Converting to spherical coordinates ...")
         # Calculate R and LT for axes
         if usemagcoords:
             x = self.df['X']
@@ -158,7 +163,9 @@ class MagData(object):
 
     @spice.withspiceloaded()
     def convert_to_coordsystem(self, outCoord='JUNO_JSS', usemagcoords=True):
-
+        logging.debug("Converting from/to coordinate system - {:s}/{:s} ..."
+                      .format(self.coordsystem, outCoord))
+        
         # spice_load_kernels()
 
         def tmp_func_convert(row, outCoord=outCoord):
@@ -248,28 +255,38 @@ def merge_magdata(m1, m2):
 
 
 def get_mag_data(
-        start, stop,
+        start, stop, doDownload=True,
         datafolder='data/mag/', coordsystem=None, sid='SS 1 SECOND'):
     """
     Get magnetometer data between certain start and stop times.
     Downloads files if they do not exist.
     """
-    magindex = index.IndexFile(dataset='mag')
+    magindex = index.IndexFile(
+        dataset='mag', outfolder=datafolder + '/../../index/')
+
+    logging.debug(
+        f"Getting magnetometer files. doDownload = {doDownload}")
+    
     files = magindex.get_files_between_dates( 
         start, stop, 
-        doDownload=True,
+        doDownload=doDownload,
         sid=sid, outfolder=datafolder)
+    
+    if not files:
+        logging.error("No relevant magnetometer file found on the PDS.")
 
     for f in files:
-        if not f.with_suffix('.hdf5').exists():
-            print('Converting .sts MAG files to .HDF5 ... ')
-            _ = MagData(filename=str(f))
+        if not f.with_suffix(".hdf5").exists():
+            _ = MagData(filename=str(f), ishdf=False)
+        elif not f.exists():
+            logging.error("Magnetometer file missing. Use doDownload=True")
 
     files = [str(x.with_suffix('.hdf5')) for x in files]
 
     magdatalist = []
 
     for f in files:
+        logging.debug(f"Appending MAG file - {f}")
         magdatalist.append(
             MagData(
                 filename=f,
@@ -284,30 +301,3 @@ def get_mag_data(
         merged = merge_magdata(merged, magdata)
 
     return merged
-    # magdata = []
-
-    # for day in pd.date_range(start, stop):
-        
-    #     files = glob.glob(
-    #         datafolder + '/*{:s}ss*.hdf5'.format(day.strftime('%Y%j')))
-    #     print(files)
-    #     mdata = []
-    #     for f in files:
-    #         mdata.append(
-    #             MagData(
-    #             filename=f,
-    #             start=start,
-    #             stop=stop,
-    #             coordsystem=coordsystem))
-
-    #     dayresult = mdata[0]
-    #     for i in range(len(mdata) - 1):
-    #         dayresult = merge_magdata(dayresult, mdata[i + 1])
-
-    #     magdata.append(dayresult)
-
-    # result = magdata[0]
-    # for i in range(len(magdata) - 1):
-    #     result = merge_magdata(result, magdata[i + 1])
-
-    # return result

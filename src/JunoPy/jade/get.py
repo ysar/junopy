@@ -20,11 +20,11 @@ def get_jade_data_files(start, stop, **kwargs):
     datatype = kwargs.pop("datatype", "ELECTRONS")
 
     for day in pd.date_range(start, stop):
-
+        
         relevantFiles = glob.glob(
             datafolder \
             + day.strftime("/%Y/%j/") \
-            + f"*{PATTERNS[datatype]}*.DAT.gz")
+            + f"*{PATTERNS[datatype]}*")
         
         if not getLRS:
             relevantFiles = [

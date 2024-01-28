@@ -219,7 +219,7 @@ class JadeData(object):
         self.dtbin     = kwargs.pop('dtbin', dt.timedelta(seconds=120))
         # self.nEbins    = kwargs.pop('nEbins', 20)    # Decrepated for now
         self.nPAbins   = kwargs.pop('nPAbins', 12)
-        self.units     = kwargs.pop('units', 'PSD')
+        self.units     = kwargs.pop('units', 'COUNTS')
         self.calcEflux = kwargs.pop('calcEflux', False)
         self.paMin     = kwargs.pop('paMin', 0)
         self.paMax     = kwargs.pop('paMax', 180)
@@ -230,6 +230,7 @@ class JadeData(object):
 
         self.read_binary_file()
         self.calc_pitchangles()
+        self.detect_sensor()
         self.Geff = get_Geff_electrons(
             self.data_raw['DIM1_E'], self.times, self.data_raw['DIM2_ELEVATION'])
         
@@ -304,6 +305,24 @@ class JadeData(object):
         self.pitchanglebins = np.linspace(0, 180, self.nPAbins + 1)
 
 
+    def detect_sensor(self):
+        """
+        Returns the sensor in use.
+        """
+        packetid = self.data_raw['PACKETID']
+        if packetid == 105:
+            return 'NONE'
+        elif packetid == 104:
+            return '060'
+        elif packetid == 106:
+            return '180'
+        elif packetid == 107:
+            return '300'
+        elif packetid == 255:
+            return 'UNKNOWN'
+        
+
+    
     def calc_energy_spectra(self):
         """
         Calculate the energy spectra.

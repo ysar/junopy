@@ -2,12 +2,13 @@
 import numpy as np
 import datetime as dt
 
-from JunoPy.spice import InitSpiceKernels, get_juno_position
+from JunoPy.spice import withspiceloaded, get_juno_position
 
+@withspiceloaded()
 def test_spice():
     """
     """
-    InitSpiceKernels()
+    
     times = [
         dt.datetime(2016, 12, 1),
         dt.datetime(2017, 12, 1),

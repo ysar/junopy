@@ -15,6 +15,7 @@ import logging
 
 from pathlib import Path, PosixPath
 from JunoPy import download
+from JunoPy import config
 from JunoPy.library import DATA_ID, PDS_URL, EXTENSIONS, TIMEFORMAT
 
 
@@ -27,7 +28,7 @@ class IndexFile(object):
     :param str dataset: String describing the dataset. 
                         (mag/waves-survey/jedi, Default - '').
     """
-    def __init__(self, dataset='', doDownload=False, outfolder=Path('index')):
+    def __init__(self, dataset='', doDownload=False):
 
         if dataset:
             self.dataset = dataset
@@ -35,10 +36,10 @@ class IndexFile(object):
         else:
             raise Exception('Specify dataset.')
         
-        logging.debug(f"Index file folder - {str(outfolder)}")
-        self.outfolder = Path(outfolder)
+        self.outfolder = Path(config.ConfigVars.get("INDEX_DIR"))
         self.outfolder.mkdir(parents=True, exist_ok=True)
-            
+        logging.debug(f"Index file folder - {str(self.outfolder)}")
+        
         indexfile = self.outfolder / f"index_{self.dataset}.csv"
         
         if not indexfile.exists() or doDownload:
@@ -96,7 +97,6 @@ class IndexFile(object):
         self, start, stop, 
         sid='', 
         doDownload=False, 
-        outfolder=None, 
         getLBL=False,
         doMultiprocessing=False,
         chunk=16 * 1024 * 1024):
@@ -118,11 +118,7 @@ class IndexFile(object):
         if sid:
             df_masked = df[df['SID'].str.contains(sid)]
         
-        if not outfolder:
-            outfolder = Path('data') / self.dataset
-        else:
-            outfolder = Path(outfolder)
-
+        outfolder = config.ConfigVars.get("DATA_DIR") / self.dataset
         outfolder.mkdir(parents=True, exist_ok=True)
 
         # Ignore unwanted files from waves

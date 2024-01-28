@@ -21,9 +21,9 @@ import numpy as np
 import pandas as pd
 import struct
 import re
-import gzip
 import logging
 
+from isal import igzip
 from matplotlib import pyplot as plt
 from matplotlib import colors
 from numpy import ma
@@ -33,7 +33,7 @@ from .calib import get_Geff_electrons
 
 def open_file(filename, *args):
     if '.gz' == filename[-3:]:
-        return gzip.open(filename, *args)
+        return igzip.open(filename, *args)
     else:
         return open(filename, *args)
 
@@ -49,6 +49,7 @@ def read_jade_lbl_file(lblfile):
         dfLabel (pandas.DataFrame): DataFrame with the contents of the .LBL 
             file containing the name, type, and dimensions of each column.
     """
+    logging.debug(f"Reading JADE label file - {lblfile}")
     dfLabel = pd.DataFrame(columns=['name', 'dataID-np', 'nDim', 'shape'])
 
     with open_file(lblfile, 'rt') as f:
@@ -106,6 +107,7 @@ def _read_jade_bytes(filename, dfLabel, nRecords):
         Currently, this is stored as a 1D array with size `(m*n)` (it is 
         reshaped later).
     """
+    logging.debug(f"Reading JADE binary file - {filename}")
     data = pd.DataFrame(columns=dfLabel['name'].to_list())
 
     # We will create numpy arrays to store data and then copy over the array to

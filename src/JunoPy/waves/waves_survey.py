@@ -9,7 +9,8 @@ import glob
 import matplotlib.colors as colors
 from matplotlib import ticker
 
-from JunoPy.index import IndexFile
+from JunoPy import config
+from JunoPy import index
 
 class WavesData(object):
 
@@ -270,30 +271,27 @@ class WavesDataDas(object):
         return ax
     
     
-def get_waves_data(start, end, datafolder='data/waves-survey/'):
+def get_waves_data(start, end):
     """Get the electric and magnetic field data from the Waves survey."""
     
-    wavesfiles = glob.glob(datafolder + '*{:s}*.CSV'.format(start.strftime('%Y%j')))
+    datafolder = config.ConfigVars.get("WAVES_DATA_DIR")
+    wavesfiles = glob.glob(datafolder + '/*{:s}*.CSV'.format(start.strftime('%Y%j')))
 
     if len(wavesfiles) != 2:
-        wavesindex = IndexFile(dataset='waves-survey')
+        wavesindex = index.IndexFile(dataset='waves-survey')
         _ = wavesindex.get_files_between_dates(
-            start, end, DoDownload=True, sid='SURVEY', outfolder=datafolder)
+            start, end, DoDownload=True, sid='SURVEY')
 
-        wavesfiles = glob.glob(datafolder + '*{:s}*.CSV'.format(start.strftime('%Y%j')))
+        wavesfiles = glob.glob(datafolder + '/*{:s}*.CSV'.format(start.strftime('%Y%j')))
     
         # assert(len(wavesfiles) == 2)
         
     for wfile in wavesfiles:
         print('Reading Waves file - {:s}'.format(wfile))
         if '_E_' in wfile:
-            wavesdataE = WavesData(filename=wfile, 
-                                   start=start, 
-                                   end=end)
+            wavesdataE = WavesData(filename=wfile, start=start, end=end)
         else:
-            wavesdataB = WavesData(filename=wfile, 
-                                   start=start, 
-                                   end=end)
+            wavesdataB = WavesData(filename=wfile, start=start, end=end)
 
     return wavesdataE, wavesdataB
 

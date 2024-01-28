@@ -1,25 +1,37 @@
 import os
+import logging
 
-class JunoPyConfig:
+class ConfigVars:
     
-    __config = {
-        "DATA_DIR": "data/",
-        "SPICE_DIR": "spice/",
-        "INDEX_DIR": "index/",
-        "JADE_DATA_DIR": "data/jade/",
-        "JEDI_DATA_DIR": "data/jedi/",
-        "WAVES_DATA_DIR": "data/waves/",
-        "MAG_DATA_DIR": "data/mag/"
-    }
+    __config = {"ROOT_DIR": "./"}
 
-    @staticmethod
-    def config(name):
-        return JunoPyConfig.__config[name]
+    @classmethod
+    def get(cls, name):
+        return cls.__config[name]
     
-    @staticmethod
-    def set(name, value):
-        JunoPyConfig.__config[name] = value
+    @classmethod
+    def set_root(cls, value):
+        cls.__config["ROOT_DIR"] = value
+        cls._set_dependent_vars()
+        logging.info(f"Root directory changed to {cls.get("ROOT_DIR")}")
+        logging.info(f"Data directory changed to {cls.get("DATA_DIR")}")
+        logging.info(f"SPICE directory changed to {cls.get("SPICE_DIR")}")
+        logging.info(f"Index directory changed to {cls.get("INDEX_DIR")}")
 
-    @staticmethod
-    def _update_dependent_configs(name):
-        pass
+    @classmethod
+    def _set_dependent_vars(cls):
+        rootDir = cls.__config["ROOT_DIR"]
+        dataDir = os.path.join(rootDir, "data")
+        cls.__config["DATA_DIR"] = dataDir
+        cls.__config["SPICE_DIR"] = os.path.join(rootDir, "spice")
+        cls.__config["INDEX_DIR"] = os.path.join(rootDir, "index")
+        cls.__config["MAG_DATA_DIR"] = os.path.join(dataDir, "mag")
+        cls.__config["JADE_DATA_DIR"] = os.path.join(dataDir, "jade")
+        cls.__config["JEDI_DATA_DIR"] = os.path.join(dataDir, "jedi")
+        cls.__config["WAVES_DATA_DIR"] = os.path.join(dataDir, "waves")
+    
+    @classmethod
+    def get_all(cls):
+        return cls.__config
+
+ConfigVars._set_dependent_vars()

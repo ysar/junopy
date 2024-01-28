@@ -9,6 +9,8 @@ import logging
 from pathlib import Path
 from JunoPy import spice
 from JunoPy import index
+from JunoPy import config
+
 
 class MagData(object):
 
@@ -255,14 +257,13 @@ def merge_magdata(m1, m2):
 
 
 def get_mag_data(
-        start, stop, doDownload=True,
-        datafolder='data/mag/', coordsystem=None, sid='SS 1 SECOND'):
+        start, stop, doDownload=True, coordsystem=None, sid='SS 1 SECOND'):
     """
     Get magnetometer data between certain start and stop times.
     Downloads files if they do not exist.
     """
-    magindex = index.IndexFile(
-        dataset='mag', outfolder=datafolder + '/../../index/')
+
+    magindex = index.IndexFile(dataset='mag')
 
     logging.debug(
         f"Getting magnetometer files. doDownload = {doDownload}")
@@ -270,7 +271,7 @@ def get_mag_data(
     files = magindex.get_files_between_dates( 
         start, stop, 
         doDownload=doDownload,
-        sid=sid, outfolder=datafolder)
+        sid=sid)
     
     if not files:
         logging.error("No relevant magnetometer file found on the PDS.")

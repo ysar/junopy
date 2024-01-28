@@ -20,8 +20,9 @@ import datetime as dt
 import pandas as pd
 import JupiterMag
 import spiceypy as spice
-import gzip
 import shutil
+
+from isal import igzip
 
 from JunoPy.spice import get_juno_position, withspiceloaded
 
@@ -371,6 +372,6 @@ def create_gz_zip_file(filename):
     Compresses a file into .gz file.
     """
     with open(filename, 'rb') as fIn:
-        with gzip.open(filename + '.gz', 'wb') as fOut:
+        with igzip.open(filename + '.gz', 'wb') as fOut:
             shutil.copyfileobj(fIn, fOut)
     os.remove(filename)

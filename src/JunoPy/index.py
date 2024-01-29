@@ -118,7 +118,7 @@ class IndexFile(object):
         if sid:
             df_masked = df[df['SID'].str.contains(sid)]
         
-        outfolder = config.ConfigVars.get("DATA_DIR") / self.dataset
+        outfolder = Path(config.ConfigVars.get("DATA_DIR")) / self.dataset
         outfolder.mkdir(parents=True, exist_ok=True)
 
         # Ignore unwanted files from waves
@@ -205,7 +205,7 @@ class IndexFile(object):
 
         if doMultiprocessing:
             download.download_multiple_files(
-                downloadFileUrls, downloadFileOutNames, chunk=chunk)
+                downloadFileUrls, downloadFileOutNames, dchunk=chunk)
         else:
             for url, fOut in zip(downloadFileUrls, downloadFileOutNames):
                 print('Downloading to file - {:s}'.format(str(fOut), url))

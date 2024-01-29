@@ -2,6 +2,7 @@ import datetime as dt
 import pandas as pd
 import glob
 
+from JunoPy import config
 
 PATTERNS = {
     "ELECTRONS": "_ELC_",
@@ -14,7 +15,6 @@ def get_jade_data_files(start, stop, **kwargs):
     """
     Return combined JADE low and high-res data.
     """
-    datafolder = kwargs.pop("datafolder", "data/jade/")
     getHRS = kwargs.pop("getHRS", True)
     getLRS = kwargs.pop("getLRS", True)
     datatype = kwargs.pop("datatype", "ELECTRONS")
@@ -22,7 +22,7 @@ def get_jade_data_files(start, stop, **kwargs):
     for day in pd.date_range(start, stop):
         
         relevantFiles = glob.glob(
-            datafolder \
+            config.ConfigVars.get("JADE_DATA_DIR")\
             + day.strftime("/%Y/%j/") \
             + f"*{PATTERNS[datatype]}*")
         
@@ -34,5 +34,4 @@ def get_jade_data_files(start, stop, **kwargs):
             relevantFiles = [
                 f for f in relevantFiles if "_HRS" not in f and "_HLS" not in f]
             
-        
         return relevantFiles

@@ -12,11 +12,10 @@ class ConfigVars:
     @classmethod
     def set_root(cls, value):
         cls.__config["ROOT_DIR"] = value
-        cls._set_dependent_vars()
         logging.info(f"Root directory changed to {cls.get("ROOT_DIR")}")
-        logging.info(f"Data directory changed to {cls.get("DATA_DIR")}")
-        logging.info(f"SPICE directory changed to {cls.get("SPICE_DIR")}")
-        logging.info(f"Index directory changed to {cls.get("INDEX_DIR")}")
+
+        cls._set_dependent_vars()
+        
 
     @classmethod
     def _set_dependent_vars(cls):
@@ -28,8 +27,18 @@ class ConfigVars:
         cls.__config["MAG_DATA_DIR"] = os.path.join(dataDir, "mag")
         cls.__config["JADE_DATA_DIR"] = os.path.join(dataDir, "jade")
         cls.__config["JEDI_DATA_DIR"] = os.path.join(dataDir, "jedi")
-        cls.__config["WAVES_DATA_DIR"] = os.path.join(dataDir, "waves")
-    
+        cls.__config["WAVES_SURVEY_DATA_DIR"] = \
+            os.path.join(dataDir, "waves-survey")
+        cls.__config["TMP_DIR"] = os.path.join(rootDir, "_tmp")
+
+        for key in cls.__config.keys():
+            if "DIR" in key:
+                os.makedirs(cls.__config[key], exist_ok=True)
+
+        logging.info(f"Data directory changed to {cls.get("DATA_DIR")}")
+        logging.info(f"SPICE directory changed to {cls.get("SPICE_DIR")}")
+        logging.info(f"Index directory changed to {cls.get("INDEX_DIR")}")
+
     @classmethod
     def get_all(cls):
         return cls.__config

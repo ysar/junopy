@@ -274,7 +274,7 @@ class WavesDataDas(object):
 def get_waves_data(start, end):
     """Get the electric and magnetic field data from the Waves survey."""
     
-    datafolder = config.ConfigVars.get("WAVES_DATA_DIR")
+    datafolder = config.ConfigVars.get("WAVES_SURVEY_DATA_DIR")
     wavesfiles = glob.glob(datafolder + '/*{:s}*.CSV'.format(start.strftime('%Y%j')))
 
     if len(wavesfiles) != 2:

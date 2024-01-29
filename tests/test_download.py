@@ -3,8 +3,8 @@ import os
 import datetime as dt
 
 from JunoPy.download import download_file
-from JunoPy.index import IndexFile
-from JunoPy.library import PDS_URL, DATASETS
+from JunoPy import index
+from JunoPy import config
 
 
 def test_download():
@@ -17,19 +17,76 @@ def test_download():
 
     file1 = 'WAV_2016021T000000_B_V01.CSV'
     file2 = 'WAV_2016021T000000_E_V01.CSV'
-    for f in [url + file1, url + file2]:
-        download_file(f)
+    for f in [file1, file2]:
+        download_file(url + f, "tmp-" + f)
 
-    assert(os.path.exists(file1))
-    assert(os.path.exists(file2))
+    assert(os.path.exists("tmp-" + file1))
+    assert(os.path.exists("tmp-" + file2))
 
-    os.remove(file1)
-    os.remove(file2)
+    os.remove("tmp-" + file1)
+    os.remove("tmp-" + file2)
 
 
-def test_download_indexfile():
+def test_download_indexfiles():
     """
-    Download an index file.
+    Downloads many index files and their associated data files for each 
+    instrument type.
     """
-    magindex = IndexFile(dataset='mag')
-    assert(os.path.exists('index/INDEX_mag.csv'))
+    magIndex = index.IndexFile(dataset="mag")
+    assert(os.path.exists("index/index_mag.csv"))
+
+    jadeIndex = index.IndexFile(dataset="jade")
+    assert(os.path.exists("index/index_jade.csv"))
+
+    jediIndex = index.IndexFile(dataset="jedi")
+    assert(os.path.exists("index/index_jedi.csv"))
+
+    wavesSurveyIndex = index.IndexFile(dataset="waves-survey")
+    assert(os.path.exists("index/index_waves-survey.csv"))
+
+
+def test_download_mag_data():
+    start = dt.datetime(2019, 1, 2)
+    stop = dt.datetime(2019, 1, 3)
+    
+    magIndex = index.IndexFile(dataset="mag", doDownload=False)
+    
+    magIndex.get_files_between_dates(
+        start, stop, 
+        sid="SS 1 MINUTE",
+        doDownload=True, doMultiprocessing=True)
+    
+    assert(os.path.exists("data/mag/2019/001/fgm_jno_l3_2019001ss_r60s_v01.sts"))
+    assert(os.path.exists("data/mag/2019/002/fgm_jno_l3_2019002ss_r60s_v01.sts"))
+    assert(os.path.exists("data/mag/2019/003/fgm_jno_l3_2019003ss_r60s_v01.sts"))
+    
+    
+def test_download_jade_data():
+    start = dt.datetime(2019, 1, 2)
+    stop = dt.datetime(2019, 1, 3)
+    jadeIndex = index.IndexFile(dataset="jade")
+    jadeIndex.get_files_between_dates(
+        start, stop, 
+        sid="_ELC_",
+        doDownload=True, doMultiprocessing=True, getLBL=True)
+    
+    assert(os.path.exists("data/jade/2019/001/JAD_L30_LRS_ELC_ANY_CNT_2019001_V04.DAT"))
+    assert(os.path.exists("data/jade/2019/001/JAD_L30_LRS_ELC_ANY_CNT_2019001_V04.LBL"))
+    
+def test_download_jedi_data():
+    start = dt.datetime(2019, 1, 2)
+    stop = dt.datetime(2019, 1, 3)
+    jediIndex = index.IndexFile(dataset="jedi")
+    jediIndex.get_files_between_dates(
+        start, stop, 
+        sid="ERSESP",
+        doDownload=True, doMultiprocessing=True)
+
+def test_download_waves_survey_data():
+    start = dt.datetime(2019, 1, 2)
+    stop = dt.datetime(2019, 1, 3)
+    wavesSurveyIndex = index.IndexFile(dataset="waves-survey")
+    wavesSurveyIndex.get_files_between_dates(
+        start, stop, 
+        sid="SURVEY",
+        doDownload=True, doMultiprocessing=True)

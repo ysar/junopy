@@ -102,7 +102,7 @@ def _read_jade_bytes(filename, dfLabel, nRecords):
         A `pandas.DataFrame` containing the contents of the .DAT file. Each row
         corresponds to a measurement interval and each column has the data
         associated with that interval. Contents of each cell of the DataFrame
-        may be 1D arrays. For e.g., each value in the 'BACKGROUND' column is an
+        may be arrays. For e.g., each value in the 'BACKGROUND' column is an
         array with shape `(m,n)` with m and n defined in the JADE SIS. 
         Currently, this is stored as a 1D array with size `(m*n)` (it is 
         reshaped later).
@@ -165,8 +165,6 @@ def read_jade_binary_file(filename):
     else:
         lblfile = filename[:-4] + '.LBL'
 
-    print(lblfile)
-
     dfLabel, nRecords = read_jade_lbl_file(lblfile)
     
     df = _read_jade_bytes(filename, dfLabel, nRecords)
@@ -184,6 +182,12 @@ def read_jade_binary_file(filename):
         else:
             df[column['name']] = df[column['name']].apply(lambda x: x[0])
 
+    df['time'] = pd.Series(
+            map(lambda x: dt.datetime.strptime(x, '%Y-%jT%H:%M:%S.%f'), 
+                df['DIM0_UTC']))
+    
+    df.set_index('time', inplace=True)
+    
     return df
 
 
@@ -194,6 +198,17 @@ def read_jade_binary_file(filename):
         datadict[key] = np.stack(df[key])
 
     return datadict
+
+
+def create_dict_from_jade_df(df):
+    """
+    Stacks the JADE data DataFrame into multi-dimensional numpy arrays to 
+    facilitate array slicing and faster operations.
+    """
+    dataDict = {}
+    for key in df.keys():
+        dataDict[key] = np.stack(df[key]).T
+    return dataDict
 
 
 class JadeData(object):

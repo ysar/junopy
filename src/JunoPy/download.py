@@ -11,7 +11,7 @@ from JunoPy import config
 
 def download_file(url, outFile, CHUNK=16*1024*1024):
     """Opens a URL and downloads it's contents onto disk."""
-    tmpFile = os.path.join(config.ConfigVars.get("TMP_DIR") + str(uuid.uuid4()))
+    tmpFile = os.path.join(config.ConfigVars.get("TMP_DIR"), str(uuid.uuid4()))
     
     try:
         with urllib.request.urlopen(url) as g:
@@ -36,6 +36,7 @@ def download_multiple_files(urls, outFiles, dchunk=16*1024*1024):
     :type urls: list(str)
     :param str outfolder: Output directory. Default is current directory.
     """
+    raise Exception("Threaded downloads are currently bugged. Do not use.")
     from threading import Thread
 
     assert (len(urls) > 0)

@@ -135,15 +135,13 @@ class IndexFile(object):
 
             doAppend = False
 
-            if (np.abs((start - row['START_TIME']).total_seconds()) < \
-                np.abs(dt.timedelta(hours=24).total_seconds())):
+            if (np.abs((start - row['START_TIME']).total_seconds()) < 86400):
                 doAppend = True
                 
-            if (np.abs((stop - row['STOP_TIME']).total_seconds()) < \
-                np.abs(dt.timedelta(hours=24).total_seconds())):
+            elif (np.abs((stop - row['STOP_TIME']).total_seconds()) < 86400):
                 doAppend = True
                 
-            if (row['START_TIME'] > start and row['STOP_TIME'] < stop):
+            elif (row['START_TIME'] > start and row['STOP_TIME'] < stop):
                 doAppend = True
 
             if doAppend:

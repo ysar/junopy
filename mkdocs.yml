@@ -15,7 +15,7 @@ nav:
     - Contributing: about/contributing.md
 
 theme:
-  name: "mkdocs"
+  name: "readthedocs"
 
 # plugins:
 # - search

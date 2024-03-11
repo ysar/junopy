@@ -277,9 +277,10 @@ def get_mag_data(
         logging.error("No relevant magnetometer file found on the PDS.")
 
     for f in files:
-        if not f.with_suffix(".hdf5").exists():
+        if f.exists():
+            logging.debug("Converting to HDF5 file ...")
             _ = MagData(filename=str(f), ishdf=False)
-        elif not f.exists():
+        elif not f.with_suffix(".hdf5").exists():
             logging.error("Magnetometer file missing. Use doDownload=True")
 
     files = [str(x.with_suffix('.hdf5')) for x in files]

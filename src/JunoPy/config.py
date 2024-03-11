@@ -14,11 +14,11 @@ class ConfigVars:
         cls.__config["ROOT_DIR"] = value
         logging.info(f"Root directory changed to {cls.get("ROOT_DIR")}")
 
-        cls._set_dependent_vars()
+        cls._set_dependent_vars(makedirs=True)
         
 
     @classmethod
-    def _set_dependent_vars(cls):
+    def _set_dependent_vars(cls, makedirs=False):
         rootDir = cls.__config["ROOT_DIR"]
         dataDir = os.path.join(rootDir, "data")
         cls.__config["DATA_DIR"] = dataDir
@@ -31,13 +31,14 @@ class ConfigVars:
             os.path.join(dataDir, "waves-survey")
         cls.__config["TMP_DIR"] = os.path.join(rootDir, "_tmp")
 
-        for key in cls.__config.keys():
-            if "DIR" in key:
-                os.makedirs(cls.__config[key], exist_ok=True)
+        if makedirs:
+            for key in cls.__config.keys():
+                if "DIR" in key:
+                    os.makedirs(cls.__config[key], exist_ok=True)
 
-        logging.info(f"Data directory changed to {cls.get("DATA_DIR")}")
-        logging.info(f"SPICE directory changed to {cls.get("SPICE_DIR")}")
-        logging.info(f"Index directory changed to {cls.get("INDEX_DIR")}")
+            logging.info(f"Data directory changed to {cls.get("DATA_DIR")}")
+            logging.info(f"SPICE directory changed to {cls.get("SPICE_DIR")}")
+            logging.info(f"Index directory changed to {cls.get("INDEX_DIR")}")
 
     @classmethod
     def get_all(cls):

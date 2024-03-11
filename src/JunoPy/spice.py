@@ -17,18 +17,21 @@ from contextlib import ContextDecorator
 R_JUPITER = 71492    # km
 R_GANYMEDE = 2634    # km
 
-JUNO_SPICE_URL = "https://naif.jpl.nasa.gov/" + \
-                 "pub/naif/pds/data/jno-j_e_ss-spice-6-v1.0/jnosp_1000/"
+# This is where the final kernels are stored? Use the other NAIF URL
+# JUNO_SPICE_URL = "https://naif.jpl.nasa.gov/" + \
+#                  "pub/naif/pds/data/jno-j_e_ss-spice-6-v1.0/jnosp_1000/"
 
 
 class withspiceloaded(ContextDecorator):
-    spiceDir = config.ConfigVars.get("SPICE_DIR")
+    
     def __enter__(self):
-        metafile = os.path.join(self.spiceDir, 'JunoMetaKernel.txt')
+        spiceDir = config.ConfigVars.get("SPICE_DIR")
+        metafile = os.path.join(spiceDir, 'JunoMetaKernel.txt')
         spice.furnsh(metafile)
     
     def __exit__(self, *exc):
-        metafile = os.path.join(self.spiceDir, 'JunoMetaKernel.txt')
+        spiceDir = config.ConfigVars.get("SPICE_DIR")
+        metafile = os.path.join(spiceDir, 'JunoMetaKernel.txt')
         spice.unload(metafile)
 
 
@@ -93,10 +96,13 @@ def download_juno_kernels(doDownload=True):
         print("Downloading SPICE kernels ...")
 
         for url in kernel_urls:
+            
+            outfile = os.path.join(spiceDir, 'kernels', os.path.split(url)[-1])
+            if os.path.exists(outfile):
+                continue
+            
             print(url)
-            download_file(
-                url, 
-                os.path.join(spiceDir, 'kernels', os.path.split(url)[-1]))
+            download_file(url, outfile)
             
         # download_multiple_files(
         #     kernel_urls, os.path.join(spiceDir, 'kernels'))
@@ -109,8 +115,7 @@ def download_juno_kernels(doDownload=True):
         f.write("KERNELS_TO_LOAD=(\n")
         
         for kernel in kernel_urls:
-            f.write("'{:s}".format(os.path.join(spiceDir, )) +\
-                    "'{:s}',\n".format(kernel.split('/')[-1]))
+            f.write("'" + os.path.join(spiceDir, "kernels", kernel.split('/')[-1]) + "',\n")
 
         f.write(")\n")
         f.write("\\begintext\n")

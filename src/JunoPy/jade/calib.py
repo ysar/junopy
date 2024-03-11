@@ -1,168 +1,115 @@
+"""
+This module contains code to calculate the geometric factor for the different
+JADE sensors. The way to calculate the geometric factor varies for 
+    - High Rate electrons Geff(Anode, Energy, time)
+    - Low Rate electrons Geff()
+    - High / Low Rate Ions 
+
+The general equation is - 
+
+G(delta, E, Anode, time) = G_simulations \
+    * maxEpsilon \
+    * [1 - exp(-k * Eratio**(1-n) * (1 - exp(-rho * Eratio**n))] \
+    * tau(time) \
+    * D(delta) \ 
+    * F(anode)
+
+Eratio = E / maxE
+    
+Here (maxEpsilon, k, maxE, rho, n) depend on sensor only.
+     (tau) depends only on time of measurement
+     D(delta) depends on deflection angle and sensor
+
+"""
+
 import numpy as np
 import datetime as dt
 import pandas as pd
 
 
+def get_sensor_constants(sensorId):
 
-def _construct_F_anode():
-    """
-    Constructs the constant table of F(A) where F corresponds to the equations 
-    in 
-    and A refers to anode.
-    """
-    df = pd.DataFrame(columns=['c0', 'c1', 'c2', 'b0', 'b1', 'd', 'f'])
+    if sensorId == 104:    # E-060
+        sensorConst = {
+            'maxEpsilon': 0.96,
+            'k': 3.58,
+            'maxE': 0.98e3,
+            'rho': 1.58,
+            'n': 1.67,
+            'tau0_t0': 1.04,
+            'tau0_t1': 1.04,
+            'tau0_t2': 1.23,
+            'tau1_t1': -0.062,
+            'tau1_t2': -0.076,
+            'c0': 3.12e-5,
+            'c1': -5.3e-8,
+            'c2': -6.92e-9,
+            'b0': 1.088,
+            'b1': -9.766e-3,
+            'f': 0.745
+        }
 
-    df['c0'] = np.full((32,), 3.12e-5)
-    df['c1'] = np.full((32,), -5.3e-8)
-    df['c2'] = np.full((32,), -6.92e-9)
-    df['b0'] = np.concatenate((np.full((16,), 1.088), np.full((16,), 1.048)))
-    df['b1'] = np.concatenate((
-        np.full((16,), -9.766e-3), np.full((16,), -5.372e-3)))
-    df['f'] = np.full((32,), 1.)
-    df['d'] = np.concatenate((np.full((16,), 16), np.full((16,), 32)))
-    df.loc[[0, 15, 16, 31], 'f'] = 0.745
+    elif sensorId == 106:    # E-180
+        sensorConst = {
+            'maxEpsilon': 1.22,
+            'k': 2.78,
+            'maxE': 0.91e3,
+            'rho': 2.44,
+            'n': 1.67,
+            'tau0_t0': 1.16,
+            'tau0_t1': 1.16,
+            'tau0_t2': 1.20,
+            'tau1_t1': -0.079,
+            'tau1_t2': -0.074,
+            'c0': 3.12e-5,
+            'c1': -5.3e-8,
+            'c2': -6.92e-9,
+            'b0': 1.048,
+            'b1': -5.372e-3,
+            'f': 0.745
+        }
+
+    return sensorConst
+
+
+def calc_time_correction_tau(t, sensorConst):
+    c = sensorConst
+    refTime1 = dt.datetime(2016, 7, 4)
+    refTime2 = dt.datetime(2019, 5, 22)
+    deltat1 = (t - refTime1).total_seconds() / (3600 * 24 * 365)
+    deltat2 = (t - refTime2).total_seconds() / (3600 * 24 * 365)
     
-    return df
+    if deltat1 < 0:
+        return c['tau0_t0']
+    elif deltat2 < 0:
+        return c['tau0_t1'] + c['tau1_t1'] * deltat1
+    else:
+        return c['tau0_t2'] + c['tau1_t2'] * deltat1
 
 
-def _calc_deflection_effect(delta):
-    """
-    Assume that delta has shape (Anode, Energy, time). 
-    This is NOT supposed to be used for LRS data.
-    """
-    assert (delta.shape[0] == 32)
-    dfConsts = _construct_F_anode()
+def calc_deflection_correction_D(delta, sensorConst):
+    # delta is 'DIM2_ELEVATION'
+    d = delta * np.pi / 180
+    c = sensorConst
+    return (1. + c['c1'] / c['c0'] * d + c['c2'] / c['c0'] * d**2)
 
-    anode = dfConsts.index
+def calc_anode_correction_F(sensorConst):
+    c = sensorConst
+    F = np.zeros(16)
+    F[0] = (c['b0'] + c['b1'] * 16) * c['f']
+    F[-1] = (c['b0'] + c['b1'] * 1) * c['f']
+    for i in range(1, 15):
+        F[i] = (c['b0'] + c['b1'] * (16 - i))
 
-    D_delta = delta * dfConsts['c1'] / dfConsts['c0']\
-            + delta * dfConsts['c2'] / dfConsts['c0']
-    
-    F_A = dfConsts['f'] * (
-        dfConsts['b0'] + dfConsts['b1'] * (dfConsts['d'] - anode.T))
-        
-    return (F_A * D_delta).T
+    return F
 
 
-def get_Geff_electrons(energies, times, elevations, sensor='BOTH'):
+def calc_simulation_geom_factor(energies):
+    return 0.8 * 0.9 * (2.37e-4 + 9.17e-11 * energies)
 
-    rowindex = ['060', '180']
-    columns = ['tau0', 'tau1', 'Emax', 'rho', 'n', 'k', 'epsilonmax']
-    paramCases = [
-        pd.DataFrame(index=rowindex, columns=columns).fillna(0.), 
-        pd.DataFrame(index=rowindex, columns=columns).fillna(0.), 
-        pd.DataFrame(index=rowindex, columns=columns).fillna(0.)]
-    
-    # Case 0 : Before any corrections
-    paramCases[0]['tau0'] = [1.04, 1.16]
-    paramCases[0]['Emax'] = [1811, 1837]
-    paramCases[0]['rho'] = [2.22, 3.104]
-    paramCases[0]['n'] = 1.67
-    paramCases[0]['k'] = [4.033, 3.352]
-    paramCases[0]['epsilonmax'] = [0.923, 1.137]
-
-    # Case 1 : 2016-07-04 to 2019-05-21
-    paramCases[1]['tau0'] = [1.04, 1.16]
-    paramCases[1]['tau1'] = [-0.062, -0.079]
-    paramCases[1]['Emax'] = [870, 1140]
-    paramCases[1]['rho'] = [1.33, 2.67]
-    paramCases[1]['n'] = 1.67
-    paramCases[1]['k'] = [4.0, 2.86]
-    paramCases[1]['epsilonmax'] = [0.95, 1.21]
-
-    # Case 2 : 2019-05-22 to -
-    paramCases[2]['tau0'] = [1.04, 1.16]
-    paramCases[2]['tau1'] = [-0.062, -0.079]
-    paramCases[2]['Emax'] = [870, 1140]
-    paramCases[2]['rho'] = [1.33, 2.67]
-    paramCases[2]['n'] = 1.67
-    paramCases[2]['k'] = [4.0, 2.86]
-    paramCases[2]['epsilonmax'] = [0.95, 1.21]
-
-    
-    # shape(nDir, nE, nTime)
-    G_simulation = 0.8 * 0.9 * (2.37e-4 + 9.17e-11 * energies)
-    
-    G_eff = G_simulation
-    
-    # Consider anode dependence if in HRS
-    if energies.shape[0] == 32: 
-        G_eff *= _calc_deflection_effect(elevations)
-
-    delta = np.array([
-        (dt.datetime(2016, 7, 4) - x) / dt.timedelta(year=1) \
-            if x > dt.datetime(2016, 7, 4) else 0. for x in times ])
-    
-    print(delta)
-
-    effCase = np.zeros(times.shape)
-    for i, t in enumerate(times):
-        if t < dt.datetime(2016, 7, 3):
-            effCase[:, :, i] = 0
-        elif t < dt.datetime(2019, 5, 22):
-            effCase[:, :, i] = 1
-        else:
-            effCase[:, :, i] = 2
-
-    tau = np.zeros(energies)
-    eff = np.zeros(energies)
-    for i in [0, 1, 2]:
-        iCase = (effCase == 0).nonzero()
-
-        if energies.shape[0] == 32:    # Only two sensors
-
-            col_060 = paramCases[iCase].loc['060', :]
-            col_180 = paramCases[iCase].loc['180', :]
-
-            tau[:16, :, iCase] = \
-                col_060['tau0'] + col_060['tau1'] * delta[iCase]
-            
-            tau[16:, :, iCase] = \
-                col_180['tau0'] + col_180['tau1'] * delta[iCase]
-            
-            eff[:16 ,:, iCase] = \
-                col_060['epsilonmax'] \
-                * (1 - np.exp(
-                    -col_060['k'] 
-                    * (energies[:16, :, iCase] / col_060['Emax'])**(1 - col_060['n'])
-                    * (1 - np.exp(-col_060['rho'] 
-                                  * (energies[:16, :, iCase])**col_060['n'])
-                        )
-                    )
-                )
-            
-            eff[16: ,:, iCase] = \
-                col_180['epsilonmax'] \
-                * (1 - np.exp(
-                    -col_180['k'] 
-                    * (energies[16:, :, iCase] / col_180['Emax'])**(1 - col_180['n'])
-                    * (1 - np.exp(-col_180['rho'] 
-                                  * (energies[16:, :, iCase])**col_180['n'])
-                        )
-                    )
-                )
-                
-            
-        else:
-            
-            col = paramCases[iCase].loc[sensor, :]
-
-            tau[:, :, iCase] = col['tau0'] + col['tau1'] * delta[iCase]
-            
-            eff[: ,:, iCase] = \
-                col['epsilonmax'] \
-                * (1 - np.exp(
-                    -col['k'] 
-                    * (energies[:, :, iCase] / col['Emax'])**(1 - col['n'])
-                    * (1 - np.exp(-col['rho'] 
-                                  * (energies[:, :, iCase])**col['n'])
-                        )
-                    )
-                )
-            
-    Geff *= tau * eff
-
-    return Geff
-
-
+def calc_sensor_dependence_exp(sensorConst, energies):
+    c = sensorConst
+    innerExp = 1 - np.exp(-c['rho'] * (energies / c['maxE'])**c['n'])
+    return c['maxEpsilon'] \
+        * (1 - np.exp(-c['k'] * (energies / c['maxE'])**(1 - c['n']) * innerExp))
 

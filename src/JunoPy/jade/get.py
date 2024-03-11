@@ -11,6 +11,7 @@ PATTERNS = {
     "ION_TOF": "_ION_TOF_",
 }
 
+
 def get_jade_data_files(start, stop, **kwargs):
     """
     Return combined JADE low and high-res data.
@@ -24,7 +25,7 @@ def get_jade_data_files(start, stop, **kwargs):
         relevantFiles = glob.glob(
             config.ConfigVars.get("JADE_DATA_DIR")\
             + day.strftime("/%Y/%j/") \
-            + f"*{PATTERNS[datatype]}*")
+            + f"*{PATTERNS[datatype]}*.DAT*")
         
         if not getLRS:
             relevantFiles = [

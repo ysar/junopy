@@ -54,7 +54,7 @@ class IndexFile(object):
         """
         Downloads the index file from PDS for the specified dataset.
         """
-        logging.info(f'Downloading index file ({self.dataset.upper()}) ...')
+        logging.debug(f'Downloading index file ({self.dataset.upper()}) ...')
 
         outfile = self.outfolder / 'INDEX.TAB'
 
@@ -71,7 +71,7 @@ class IndexFile(object):
         Read in the index file. PDS has conveniently chosen to use comma
         separated values.
         """
-        logging.info(f'Parsing index file ({self.dataset.upper()}) ...')
+        logging.debug(f'Parsing index file ({self.dataset.upper()}) ...')
         columns = ['VOLUME_ID', 'SID', 'DATA_SET_ID', 'PRODUCT_ID', 'START_TIME',
            'STOP_TIME', 'FILE_SPECIFICATION_NAME', 'CR_DATE',
            'PRODUCT_LABEL_MD5CHECKSUM']
@@ -193,7 +193,7 @@ class IndexFile(object):
                 downloadFileUrls.append(url[:-4] + ".LBL")
 
         if not downloadFileUrls:
-            logging.info(
+            logging.debug(
                 f"Files already exist. Nothing to download. ({self.dataset})")
             return relevantFileOutNames
         else:

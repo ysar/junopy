@@ -98,6 +98,8 @@ class JadeBinaryData(object):
         if start and stop:
             df = df.loc[start: stop].copy()
 
+        self.times = df.index
+
         self.dataForPacket = JadeBinaryData.separate_packetids(df)
 
     @staticmethod

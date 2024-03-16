@@ -1,6 +1,8 @@
 
 import numpy as np
 import pandas as pd
+import datetime as dt
+from copy import deepcopy
 
 from JunoPy import mag
 from .read import JadeBinaryData
@@ -249,3 +251,40 @@ class SensorData(object):
             index=self.times,
             columns=['PAbin_{:d}'.format(x) for x in range(len(self.paBins) - 1)],
             data=pitchAngleSpectra.T)
+        
+
+    def calc_accumulation_time_seconds(self):
+        fmt = "%Y-%jT%H:%M:%S.%f"
+        zipped = zip(self.data_raw['DIM0_UTC_UPPER'], 
+                     self.data_raw['DIM0_UTC_LOWER'])
+        
+        self.accumulationTime = np.array([
+            (dt.datetime.strptime(x, fmt) - dt.datetime.strptime(y, fmt))\
+                .total_seconds() for x, y in zipped])
+    
+    def valid_times_copy(self, times):
+        """
+        Data present in sensors that will need to be truncated.
+        """
+        x = deepcopy(self)
+
+        indices = (self.times != self.times)
+        for t in times:
+            indices += (t == self.times)
+
+        x.times = x.times[indices]
+
+        for key in ['DATA', 'DATA_SIGMA', 'BACKGROUND', 'BACKGROUND_SIGMA']:
+            x.data_raw[key] = x.data_raw[key][:, :, indices]
+
+        x.accumulationTime = x.accumulationTime[indices]
+
+        x.geomFactorEff = x.geomFactorEff[:, :, indices]
+        x.energySpectra = x.energySpectra.iloc[indices].copy()
+        x.pitchAngleSpectra = x.pitchAngleSpectra.iloc[indices, :].copy()
+        x.dataR = x.dataR[:, :, indices]
+        return x
+        
+
+
+

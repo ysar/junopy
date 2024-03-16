@@ -5,7 +5,7 @@ import glob
 from JunoPy import config
 
 PATTERNS = {
-    "ELECTRONS": "_ELC_",
+    "ELECTRONS": "S_ELC_",
     "ION_SPECIES": "_ION_ANY_",
     "ION_LOGICALS": "_ION_LOG_",
     "ION_TOF": "_ION_TOF_",

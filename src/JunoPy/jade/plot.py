@@ -1,16 +1,15 @@
 import numpy as np
 import datetime as dt
 
+import matplotlib as mpl
 from matplotlib import cm
-from matplotlib import pyplot as plt
 from matplotlib import colors
-from matplotlib import dates
 
 
 def plot_timeseries_spectra(
         dfSpectra, bins, ax, 
         vmin=None, vmax=None, cmap=None, zorder=1, 
-        plotcolorbar=True):
+        plotcolorbar=True, cbarlabel=None):
     
     # x data is time bins
     times = dfSpectra.index.to_pydatetime()
@@ -23,6 +22,11 @@ def plot_timeseries_spectra(
 
     # z data are spectral values
     z = dfSpectra.values.T
+    
+    # Correct for non-contigous data.
+    for i in range(len(times)):
+        if (timeBins[i + 1] - timeBins[i]).total_seconds() > 301:
+            z[:, i] = np.NaN
 
     if not vmin and not vmax:
         def get_percentile(arr, p):
@@ -32,7 +36,15 @@ def plot_timeseries_spectra(
         vmax = get_percentile(z, 99)
 
     norm = colors.LogNorm(vmin=vmin, vmax=vmax)
+    
+    if not cmap:
+        cmap = "turbo"
 
+    cmap = mpl.colormaps.get_cmap(cmap)
+    cmap.set_bad(color='0.5')  
+
+
+    
     mp = ax.pcolormesh(
         timeBins, bins, z, norm=norm, cmap=cmap, zorder=zorder)
 
@@ -43,6 +55,7 @@ def plot_timeseries_spectra(
         cax = ax.figure.add_axes(
             [bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
         cbar = ax.figure.colorbar(mp, cax=cax)
+        cbar.set_label(cbarlabel)
 
     return ax, mp
 

@@ -73,7 +73,7 @@ def read_jade_lbl_file(lblfile):
                 i += 1
 
 
-    dfLabel['dataID-np'].replace('c', 's', inplace=True)
+    dfLabel['dataID-np'] = dfLabel['dataID-np'].replace('c', 's')
 
     dfLabel['nbytes'] = dfLabel.apply(
         lambda x: np.prod(x['shape']) * struct.calcsize(x["dataID-np"]), 

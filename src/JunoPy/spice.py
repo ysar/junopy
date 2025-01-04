@@ -143,3 +143,30 @@ def get_juno_position(times, coordsystem='JUNO_JSS', center='JUPITER'):
         position = np.asarray(position) / R_GANYMEDE
 
     return position, lightTimes
+
+@withspiceloaded()
+def get_object_position(times, object, coordsystem='JUNO_JSS', center='JUPITER'):
+    """
+    Fetch juno position for a list of spacecraft times.
+    Input should be in datetime.
+    """
+    times_converted = []
+    for time in times:
+        times_converted.append(
+            spice.str2et(dt.datetime.strftime(time, '%Y-%m-%dT%H:%M:%S.%f')))
+
+    position, lightTimes = spice.spkpos(
+        object, times_converted, coordsystem, 'NONE', center)
+
+    spice.kclear()
+    
+    if 'JUPITER' in center:
+        position = np.asarray(position) / R_JUPITER
+    elif '503' in center or 'GANYMEDE' in center:
+        position = np.asarray(position) / R_GANYMEDE
+
+    return position, lightTimes
+
+@withspiceloaded()
+def convert_to_utc(x):
+    return spice.et2utc(x, "ISOD", 6)

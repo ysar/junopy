@@ -795,9 +795,10 @@ def get_jedi_data(**kwargs):
     AllData = []
 
     for day in pd.date_range(kwargs['start'], kwargs['stop']):
-
+        print(datafolder + day.strftime("/%Y/%j/") + '/*{:s}_CDR_{:s}_*.hdf5'.format(idstring, day.strftime('%Y%j')))
         dataFiles = glob.glob(
             datafolder + \
+            day.strftime("/%Y/%j/") + \
             '/*{:s}_CDR_{:s}_*.hdf5'.format(idstring, day.strftime('%Y%j')))
 
         if 'JEDI-90' in sensor:

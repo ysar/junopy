@@ -84,7 +84,7 @@ class MagData(object):
         self.df = pd.read_csv(
             self.filename,
             names=self.columns,
-            delim_whitespace=True,
+            sep='\s+',
             skiprows=nheader
             )
 
@@ -116,7 +116,7 @@ class MagData(object):
     def convert_to_hdf(self):
         logging.debug(f"Converting file to HDF - {self.filename}")
         assert('.sts' in self.filename)
-        self.df.to_hdf(self.filename[:-4] + '.hdf5', 'data')
+        self.df.to_hdf(self.filename[:-4] + '.hdf5', key='data')
         os.remove(self.filename)
         self.filename = self.filename[:-4] + '.hdf5'
 

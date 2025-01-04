@@ -20,9 +20,10 @@ def get_jade_data_files(start, stop, **kwargs):
     getLRS = kwargs.pop("getLRS", True)
     datatype = kwargs.pop("datatype", "ELECTRONS")
 
+    relevantFiles = []
     for day in pd.date_range(start, stop):
         
-        relevantFiles = glob.glob(
+        relevantFiles += glob.glob(
             config.ConfigVars.get("JADE_DATA_DIR")\
             + day.strftime("/%Y/%j/") \
             + f"*{PATTERNS[datatype]}*.DAT*")
@@ -35,4 +36,4 @@ def get_jade_data_files(start, stop, **kwargs):
             relevantFiles = [
                 f for f in relevantFiles if "_HRS" not in f and "_HLS" not in f]
             
-        return relevantFiles
+    return relevantFiles

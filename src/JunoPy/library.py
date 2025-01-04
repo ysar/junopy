@@ -30,7 +30,7 @@ from JunoPy.spice import get_juno_position, withspiceloaded
 R_JUPITER = 71492    # km
 R_GANYMEDE = 2634    # km
 
-PDS_URL = 'https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI'
+PDS_URL = 'https://search-pdsppi.igpp.ucla.edu/ditdos/download?id=pds://PPI'
 
 DATA_ID = {
     'mag': 'JNO-J-3-FGM-CAL-V1.0',
@@ -57,7 +57,7 @@ TIMEFORMAT = {
 }
 
 
-def convert_pos_spherical(pos):
+def convert_pos_spherical(pos: np.array) -> tuple[np.array, np.array, np.array]:
     """
     Given coordinates (x,y,z) in pos[0], pos[1], pos[2], return R, LT, Latitude
     
@@ -72,7 +72,11 @@ def convert_pos_spherical(pos):
     return R, LT, Latitude
 
 
-def find_ticks_between(start, end, nticks=6):
+def find_ticks_between(
+    start: dt.datetime, 
+    end: dt.datetime, 
+    nticks: int = 6
+    ) -> tuple[pd.DatetimeIndex, list[str]]:
     """
     Given an axes object make the ticks appropriately for subplots.
     """
@@ -134,7 +138,7 @@ def find_ticks_between_GPhiO(start, end, nticks=6):
     return time_array, tickstring
 
 
-def get_M_shell(x, y, z):
+def get_M_shell(x: float, y: float, z: float) -> tuple[float, float, float]:
         """Get the M shell location of Juno using Ray-Tracing."""
         JupiterMag.Con2020.Config(equation_type='analytic')
         T_analytic = JupiterMag.TraceField(x, y, z,
@@ -151,6 +155,14 @@ def get_M_shell(x, y, z):
         lon = lon[np.argmin(Bmag)]
 
         return M, lat * 180 / np.pi, lon * 180 / np.pi
+
+
+def get_M_shell_time(t):
+    """Get the M-shell at ONE time."""
+    pos, _ = get_juno_position([t], coordsystem="IAU_JUPITER")
+    pos = pos[0]
+    return get_M_shell(pos[0], pos[1], pos[2])
+
 
 
 def calc_deltaAlfvenJuno(times, satellite='IO'):
@@ -299,6 +311,12 @@ def find_ticks_between_deltaAlfven(
     return time_array, tickstring
 
 
+def get_M_shell_times(times):
+    position, _ = get_juno_position(times, coordsystem='IAU_JUPITER')
+    resultMshells = np.zeros(position.shape[0])
+    for i, pos in enumerate(position):
+        resultMshells[i], _, _ = get_M_shell(pos[0], pos[1], pos[2])
+    return resultMshells
 
 ## Charge exchange cross-sections
 def cxcs_Hplus_O(E):

@@ -1,6 +1,7 @@
 import os
 import logging
 
+
 class ConfigVars:
     
     __config = {"ROOT_DIR": "./"}

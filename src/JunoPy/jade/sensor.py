@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import datetime as dt
 from copy import deepcopy
+from scipy.constants import m_p, m_e, e
 
 from JunoPy import mag
 from .read import JadeBinaryData
@@ -27,6 +28,18 @@ class SensorData(object):
     def __init__(self, df, id):
 
         self.id = id
+
+        if self.id == 104:
+            self.name = "E060"
+        elif self.id == 106:
+            self.name = "E180"
+        elif self.id == 131:
+            self.name = "Species-3"
+        elif self.id == 132:
+            self.name = "Species-4"
+        elif self.id == 133:
+            self.name = "Species-5"
+
         self.times = df.index.to_pydatetime()
 
         self.data_raw = JadeBinaryData.create_dict_from_df(df)
@@ -69,7 +82,7 @@ class SensorData(object):
             self.geomFactorEff *= 12
     
 
-    def convert_units(self, inUnits='countrate', outUnits='dnf', m=1, q=1):
+    def convert_units(self, inUnits='countrate', outUnits='dnf', m=None, q=1):
 
         toConvert = ['DATA', 'DATA_SIGMA', 'BACKGROUND', 'BACKGROUND_SIGMA']
 
@@ -85,6 +98,12 @@ class SensorData(object):
                     # Differential Intensity [cm-2 s-1 sr-1 keV-1]
                     self.data_raw[k] /= (self.geomFactorEff * q * self.data_raw['DIM1_E'] * 1e-3)
                 self.data_raw['DATA_UNITS'][:] = 7
+
+            elif 'psd' in outUnits:
+                for k in toConvert:
+                    # Phase space density [s3 cm-6]
+                    speedSquared = 2 * self.data_raw['DIM1_E'] * q * e / m  # m2 s-2 
+                    self.data_raw[k] /= (self.geomFactorEff * 0.5e8 * speedSquared**2)
                 
 
     def calc_pitchangles(self, useInternal=False):
@@ -131,7 +150,10 @@ class SensorData(object):
         """
         d = self.data_raw
 
-        energies, data, pitchangles = d['DIM1_E'], d['DATA'], d['PITCH_ANGLE']
+        energies = d['DIM1_E']
+        data = d['DATA']
+        pitchangles = d['PITCH_ANGLE']
+        uncertainty = d['DATA_SIGMA']
 
         if addBackground:
             data += d['BACKGROUND']
@@ -139,6 +161,10 @@ class SensorData(object):
         # Set invalid values to zero or NaN
         data[data < -999990] = np.NaN
         data[(data < 0) & (data > -999990)] = 0.
+        
+        uncertainty[uncertainty < -999990] = np.NaN
+        uncertainty[(uncertainty < 0) & (uncertainty > -999990)] = 0.
+
 
         # Filter out the appropriate energies
         _energies = energies[0, :, 0]
@@ -151,6 +177,7 @@ class SensorData(object):
 
         energies = energies[:, condition, :]
         data = data[:, condition, :]
+        uncertainty = uncertainty[:, condition, :]
         pitchangles = pitchangles[:, condition, :]
         
         energyBins = _create_energy_bins(_energies)
@@ -163,18 +190,29 @@ class SensorData(object):
         # 2. Mask any NaN values prior to averaging
         
         dataRebinned = np.zeros((nPAbins, nEbins, data.shape[2]))
+        uncertaintyRebinned = np.zeros((nPAbins, nEbins, data.shape[2]))
 
         nanMask = ~np.isnan(data)
+        sigmaMask = ~np.isnan(uncertainty)
 
         for i in range(nPAbins):
             paMask = (paBins[i] <= pitchangles) & (paBins[i + 1] > pitchangles)
             mask = paMask & nanMask
             with np.errstate(divide='ignore', invalid='ignore'):
+
                 dataRebinned[i, :, :] = np.sum(data * mask, axis=0) / np.sum(mask, axis=0)
+
+                uncertaintyRebinned[i, :, :] = \
+                    np.sum(uncertainty**2 * mask * sigmaMask, axis=0) / np.sum(mask * sigmaMask, axis=0)
 
         dataRebinned[dataRebinned == 0.] = np.NaN
 
+        uncertaintyRebinned = np.sqrt(uncertaintyRebinned)
+        uncertaintyRebinned[uncertaintyRebinned == 0.] = np.NaN
+
         self.dataR = dataRebinned
+        self.uncertaintyR = uncertaintyRebinned
+
         self.energyBins = energyBins
         self.paBins = paBins
 
@@ -253,6 +291,29 @@ class SensorData(object):
             data=pitchAngleSpectra.T)
         
 
+    def rebin_to_perpparallel(self, m=m_e):
+        """
+        Using the pitchangle to rebin the data from 
+            (PA, E, time) to (vPerp, vParallel, time)
+        """
+        # Reprocessed data has dimensions (nPA, nE, time)
+
+        pitchAnglesMid = 0.5 * (self.paBins[1:] + self.paBins[:-1])
+        energiesMid = np.sqrt(self.energyBins[1:] * self.energyBins[:-1])
+        speeds = np.sqrt(2 * energiesMid * e / m)
+        
+        paMesh, vMesh = np.meshgrid(pitchAnglesMid, speeds, indexing='ij')
+        paMesh *= np.pi / 180.
+
+        vPerp = vMesh * np.sin(paMesh)
+        vParallel = vMesh * np.cos(paMesh)
+        
+        pass
+
+
+
+
+
     def calc_accumulation_time_seconds(self):
         fmt = "%Y-%jT%H:%M:%S.%f"
         zipped = zip(self.data_raw['DIM0_UTC_UPPER'], 
@@ -280,9 +341,19 @@ class SensorData(object):
         x.accumulationTime = x.accumulationTime[indices]
 
         x.geomFactorEff = x.geomFactorEff[:, :, indices]
-        x.energySpectra = x.energySpectra.iloc[indices].copy()
-        x.pitchAngleSpectra = x.pitchAngleSpectra.iloc[indices, :].copy()
-        x.dataR = x.dataR[:, :, indices]
+
+        try:
+            x.energySpectra = x.energySpectra.iloc[indices].copy()
+            x.pitchAngleSpectra = x.pitchAngleSpectra.iloc[indices, :].copy()
+        except AttributeError:
+            pass
+        
+        try:
+            x.dataR = x.dataR[:, :, indices]
+            x.uncertaintyR = x.uncertaintyR[:, :, indices]
+        except AttributeError:
+            pass
+
         return x
         
 

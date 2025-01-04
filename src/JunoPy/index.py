@@ -177,7 +177,7 @@ class IndexFile(object):
             if fOut.exists(): 
                 continue
 
-            if fOut.with_suffix('.hdf5').exists(): 
+            if fOut.with_suffix('.hdf5').exists():
                 continue
 
             if fOut.with_suffix(fOut.suffix + '.gz').exists():
@@ -188,9 +188,12 @@ class IndexFile(object):
             downloadFileOutNames.append(fOut)
             downloadFileUrls.append(url)
 
-            if getLBL:
-                downloadFileOutNames.append(fOut.with_suffix('.LBL'))
-                downloadFileUrls.append(url[:-4] + ".LBL")
+        # Get label files if not present and if asked for. 
+        if getLBL:
+            for url, fOut in zip(relevantFileUrls, relevantFileOutNames):
+                if not fOut.with_suffix(".LBL").exists():
+                    downloadFileOutNames.append(fOut.with_suffix('.LBL'))
+                    downloadFileUrls.append(url[:-4] + ".LBL")
 
         if not downloadFileUrls:
             logging.debug(

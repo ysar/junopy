@@ -127,7 +127,7 @@ class WavesData(object):
         if len(maxima) > 0:
             return freq[maxima[-1]]
         else:
-            return np.NaN
+            return np.nan
         
         
     def find_upperhybrid(self):
@@ -166,7 +166,7 @@ class WavesData(object):
         cdata = self.df[channels['names']].values.T
         
         c = np.zeros((len(ybins) - 1, len(timearray) - 1))
-        c[:, :] = np.NaN
+        c[:, :] = np.nan
         c[::2, :] = cdata[:, :]
 
         mp = ax.pcolormesh(timearray, ybins, c,

@@ -246,7 +246,7 @@ class JediData:
                 (self.df_raw['Pitch_Angle_T{:d}'.format(i)] < self.paMin) |
                 (self.df_raw['Pitch_Angle_T{:d}'.format(i)] > self.paMax))
             
-            self.df_raw.loc[condition, 'Pitch_Angle_T{:d}'.format(i)] = np.NaN
+            self.df_raw.loc[condition, 'Pitch_Angle_T{:d}'.format(i)] = np.nan
 
 
 
@@ -353,7 +353,7 @@ class JediData:
             self.energytime.loc[condition, 'Ebin_{:d}'.format(j)] = \
                 val[condition] / denom[condition]
 
-            self.energytime.loc[~condition, 'Ebin_{:d}'.format(j)] = np.NaN
+            self.energytime.loc[~condition, 'Ebin_{:d}'.format(j)] = np.nan
         
 
     def create_pitchangle_df(self, eqpad=False):
@@ -417,7 +417,7 @@ class JediData:
             df.loc[condition, 'PAbin_{:d}'.format(i)] /= \
                 df_nSSD.loc[condition, 'nSSDbin_{:d}'.format(i)]
 
-            df.loc[~condition, 'PAbin_{:d}'.format(i)] = np.NaN
+            df.loc[~condition, 'PAbin_{:d}'.format(i)] = np.nan
 
         if eqpad:
             self.eqpad = df
@@ -465,8 +465,8 @@ class JediData:
         
         pavalues = self.df_raw.loc[:, pacols].values.astype(float)
 
-        pavalues[((positionJuno[:, 2] >= 0) & (pavalues <= 90).T).T] = np.NaN
-        pavalues[((positionJuno[:, 2] <  0) & (pavalues >= 90).T).T] = np.NaN
+        pavalues[((positionJuno[:, 2] >= 0) & (pavalues <= 90).T).T] = np.nan
+        pavalues[((positionJuno[:, 2] <  0) & (pavalues >= 90).T).T] = np.nan
 
         count = 0
         for t in self.df_raw.index:
@@ -476,7 +476,7 @@ class JediData:
                 t + dt.timedelta(minutes=2.5)].copy()
 
             if len(db.index) == 0:
-                self.df_raw.loc[t, eqpacols] = np.NaN
+                self.df_raw.loc[t, eqpacols] = np.nan
                 continue
 
             Beq = np.nanmean(db['Beq'].values)
@@ -602,7 +602,7 @@ class JediData:
 
             cxrate['Ebin_{:d}'.format(j)] /= dEsum # meta['dE'].sum()
 
-        cxrate.replace(0, np.NaN, inplace=True)
+        cxrate.replace(0, np.nan, inplace=True)
         self.cxrate = cxrate
         self.hasCXrate = True
 
@@ -714,7 +714,7 @@ class JediData:
                     * np.pi * e * 1e10     # Unit conversion and 
                                            # "Area-projected weighted size" ? 
 
-        self.energyflux[self.energyflux == 0] = np.NaN 
+        self.energyflux[self.energyflux == 0] = np.nan 
         self.hasEflux = True
 
 

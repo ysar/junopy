@@ -12,21 +12,21 @@ individually.
 1. (Optional) For any project, it is recommended that you create a virtual 
 environment where you can install packages like JunoPy and its dependencies. 
 Using a virtual environment is a straightforward way to prevent conflict between
-different versions of the same package and compartmentalize your workflow. If 
-using conda, you can create a new virtual environment easily using 
+different versions of the same package and compartmentalize your workflow.  
 
-        $ conda create -n JunoPy-env python=3 
+    You can use the `venv` module to create a virtual environment in a 
+    directory and activate it using the following commands.
 
-    The above command will create a new environment called `JunoPy-env` and 
-    install Python3 in that environment.  
+        $ python -m venv .venv
+        $ source .venv/bin/activate
 
-    If not using `conda`, you may also create a virtual environment using 
-    [`virtualenv`](https://virtualenv.pypa.io/en/latest/index.html) or 
-    [`virtualenvwrapper`](https://virtualenvwrapper.readthedocs.io/en/latest/).
+    You can deactivate the virtual environment by calling the `deactivate` 
+    script
+        
+        $ deactivate
 
-2. One you have made your environment and activated it (e.g. 
-`conda activate JunoPy-env`), you can enter the JunoPy directory and 
-install JunoPy using `pip`. 
+2. One you have made your environment and activated it, you can enter the JunoPy 
+directory and install JunoPy using `pip`. 
 
         $ pip install .
 
@@ -40,7 +40,7 @@ install JunoPy using `pip`.
 it into your code and use it. 
 
         import JunoPy
-        from JunoPy import jade
+        from JunoPy import mag
         ...
 
 ## Usage

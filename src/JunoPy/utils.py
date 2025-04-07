@@ -64,8 +64,8 @@ class TraceMShell:
         """
         start = self.pos0
 
-        streamline = np.zeros((10000, 3)) * np.NaN
-        s = np.zeros(10000) * np.NaN
+        streamline = np.zeros((10000, 3)) * np.nan
+        s = np.zeros(10000) * np.nan
     
         streamline[0, :] = start * 1.0
         s[0] = 0.

@@ -26,7 +26,7 @@ def plot_timeseries_spectra(
     # Correct for non-contigous data.
     for i in range(len(times)):
         if (timeBins[i + 1] - timeBins[i]).total_seconds() > 301:
-            z[:, i] = np.NaN
+            z[:, i] = np.nan
 
     if not vmin and not vmax:
         def get_percentile(arr, p):

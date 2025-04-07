@@ -38,6 +38,8 @@ class MagData(object):
                 self.parse_mag_file()
                 self.convert_to_hdf()
         
+        assert isinstance(self.df, pd.DataFrame)
+
         if start and stop:
             self.df = self.df.loc[start: stop].copy()
 

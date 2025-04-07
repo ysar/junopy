@@ -159,10 +159,10 @@ class SensorData(object):
             data += d['BACKGROUND']
             
         # Set invalid values to zero or NaN
-        data[data < -999990] = np.NaN
+        data[data < -999990] = np.nan
         data[(data < 0) & (data > -999990)] = 0.
         
-        uncertainty[uncertainty < -999990] = np.NaN
+        uncertainty[uncertainty < -999990] = np.nan
         uncertainty[(uncertainty < 0) & (uncertainty > -999990)] = 0.
 
 
@@ -205,10 +205,10 @@ class SensorData(object):
                 uncertaintyRebinned[i, :, :] = \
                     np.sum(uncertainty**2 * mask * sigmaMask, axis=0) / np.sum(mask * sigmaMask, axis=0)
 
-        dataRebinned[dataRebinned == 0.] = np.NaN
+        dataRebinned[dataRebinned == 0.] = np.nan
 
         uncertaintyRebinned = np.sqrt(uncertaintyRebinned)
-        uncertaintyRebinned[uncertaintyRebinned == 0.] = np.NaN
+        uncertaintyRebinned[uncertaintyRebinned == 0.] = np.nan
 
         self.dataR = dataRebinned
         self.uncertaintyR = uncertaintyRebinned
@@ -252,7 +252,7 @@ class SensorData(object):
             energySpectra = np.sum(self.dataR * weights * nanmask, axis=0)\
                             / np.sum(weights * nanmask, axis=0)
 
-        energySpectra[energySpectra == 0.] = np.NaN
+        energySpectra[energySpectra == 0.] = np.nan
 
         self.energySpectra = pd.DataFrame(
             index=self.times,
@@ -283,7 +283,7 @@ class SensorData(object):
             pitchAngleSpectra = np.sum(self.dataR * weights * nanmask, axis=1)\
                                 / np.sum(weights * nanmask, axis=1)
         
-        pitchAngleSpectra[pitchAngleSpectra == 0.] = np.NaN
+        pitchAngleSpectra[pitchAngleSpectra == 0.] = np.nan
         
         self.pitchAngleSpectra = pd.DataFrame(
             index=self.times,

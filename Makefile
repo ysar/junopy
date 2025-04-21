@@ -13,11 +13,9 @@ help: default
 
 install:
 	pip install .
-	pip install JupiterMag
 
 install-dev:
 	pip install -e .
-	pip install JupiterMag
 
 project:
 	mkdir -p project/data
@@ -34,4 +32,3 @@ docs:
 
 tests:
 	pytest tests
-

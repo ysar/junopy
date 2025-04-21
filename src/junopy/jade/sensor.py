@@ -1,3 +1,18 @@
+# junopy - A Python API for the Juno spacecraft's particle and fields datasets.
+# Copyright (C) 2018  Yash Sarkango
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import numpy as np
 import pandas as pd
@@ -62,25 +77,25 @@ class SensorData(object):
         tau = np.zeros(len(times))
         for i in range(len(times)):
             tau[i] = calc_time_correction_tau(times[i], sensorConst)
-        
+
         tau = tau[np.newaxis, np.newaxis, :]                        # shape (16, nE, nTime)
 
         gSim = calc_simulation_geom_factor(energies)
         x = calc_sensor_dependence_exp(sensorConst, energies)
 
         # Energy Geometric Factor in units of cm2 sr eV/eV
-        self.geomFactorEff = gSim * x * tau * D * F 
-    
+        self.geomFactorEff = gSim * x * tau * D * F
+
 
     def calc_geometric_factor_ion(self):
         energies = self.data_raw['DIM1_E']
         self.geomFactorEff = 6.84e-5 \
                 + (2.52e-6 + np.log10(energies)) \
                 + (6.84e-5 * energies**(-0.28))
-        
+
         if self.id == 105 or self.id == 121:
             self.geomFactorEff *= 12
-    
+
 
     def convert_units(self, inUnits='countrate', outUnits='dnf', m=None, q=1):
 
@@ -102,15 +117,15 @@ class SensorData(object):
             elif 'psd' in outUnits:
                 for k in toConvert:
                     # Phase space density [s3 cm-6]
-                    speedSquared = 2 * self.data_raw['DIM1_E'] * q * e / m  # m2 s-2 
+                    speedSquared = 2 * self.data_raw['DIM1_E'] * q * e / m  # m2 s-2
                     self.data_raw[k] /= (self.geomFactorEff * 0.5e8 * speedSquared**2)
-                
+
 
     def calc_pitchangles(self, useInternal=False):
 
         elevation = self.data_raw['DIM2_ELEVATION'] * np.pi / 180
         azimuth = self.data_raw['DIM2_AZIMUTH_DESPUN'] * np.pi / 180
-        
+
         if useInternal:
             magvector = self.data_raw['MAG_VECTOR']
             Bmag = np.sqrt(np.sum(magvector**2, axis=0))
@@ -123,9 +138,9 @@ class SensorData(object):
                 self.times[0], self.times[-1],
                 coordsystem='Juno_JADE_despun'
                 ).df.loc[:, ['Bx', 'By', 'Bz', 'Bmag']]
-        
+
             magdata = magdata.reindex(self.times, method='nearest')
-            
+
             for c in ['Bx', 'By', 'Bz']:
                 magdata[c] /= magdata['Bmag']
 
@@ -138,10 +153,10 @@ class SensorData(object):
             np.cos(elevation) * np.sin(azimuth) * By + \
             np.sin(elevation) * Bz
             )) * 180 / np.pi
-        
+
 
     def rebin_sensor_data(
-            self, 
+            self,
             minE=None, maxE=None, minPA=None, maxPA=None, nPAbins=12,
             addBackground=False):
         """
@@ -157,11 +172,11 @@ class SensorData(object):
 
         if addBackground:
             data += d['BACKGROUND']
-            
+
         # Set invalid values to zero or NaN
         data[data < -999990] = np.nan
         data[(data < 0) & (data > -999990)] = 0.
-        
+
         uncertainty[uncertainty < -999990] = np.nan
         uncertainty[(uncertainty < 0) & (uncertainty > -999990)] = 0.
 
@@ -171,7 +186,7 @@ class SensorData(object):
         condition = np.full(_energies.shape, True)
         if minE:
             condition *= (_energies >= minE)
-        
+
         if maxE:
             condition *= (_energies <= maxE)
 
@@ -179,16 +194,16 @@ class SensorData(object):
         data = data[:, condition, :]
         uncertainty = uncertainty[:, condition, :]
         pitchangles = pitchangles[:, condition, :]
-        
+
         energyBins = _create_energy_bins(_energies)
         nEbins = len(energyBins) - 1
 
         paBins = np.linspace(0, 180, nPAbins + 1)
 
-        # Create masks - 
+        # Create masks -
         # 1. Mask invalid pitch angle values (fortunately this is only on one axis)
         # 2. Mask any NaN values prior to averaging
-        
+
         dataRebinned = np.zeros((nPAbins, nEbins, data.shape[2]))
         uncertaintyRebinned = np.zeros((nPAbins, nEbins, data.shape[2]))
 
@@ -220,7 +235,7 @@ class SensorData(object):
     def calc_energy_spectra(self, weighSolidAngle=False):
         """
         Given some data that has already been rebinned into (nPA, nE, nTime),
-        create the energy spectra (nE, nTime) by averaging over the different 
+        create the energy spectra (nE, nTime) by averaging over the different
         pitch angles.
         """
         paBins = self.paBins
@@ -231,7 +246,7 @@ class SensorData(object):
             solidAngles = np.sin(midPitchAngle) \
                             * np.sin(deltaPitchAngle * 0.5)\
                             * 4 * np.pi
-    
+
             weights = solidAngles
         else:
             weights = np.zeros(len(paBins) - 1) + 1.
@@ -242,9 +257,9 @@ class SensorData(object):
         nanmask = ~np.isnan(self.dataR)
         self.dataR[~nanmask] = 0.
 
-        # We use this context as there is no guarantee that nanmask has 
-        # atleast one True value, which would make the denominator 0. 
-        # 0 in the denominator would lead to a NaN, which is perfectly 
+        # We use this context as there is no guarantee that nanmask has
+        # atleast one True value, which would make the denominator 0.
+        # 0 in the denominator would lead to a NaN, which is perfectly
         # fine in our case. Physically, it means that no measurements
         # were made for that particular bin.
 
@@ -263,8 +278,8 @@ class SensorData(object):
     def calc_pitch_angle_spectra(self, weighEnergy=True):
         """
         Given some data that has already been rebinned into (nPA, nE, nTime),
-        create the pitch angle spectra. Default weighing along the energy axis is 
-        the energy bandwidth. 
+        create the pitch angle spectra. Default weighing along the energy axis is
+        the energy bandwidth.
         """
         energyBins = self.energyBins
 
@@ -272,7 +287,7 @@ class SensorData(object):
             weights = np.sqrt(energyBins[1:] * energyBins[:-1])
         else:
             weights = np.zeros(len(energyBins) - 1) + 1.
-        
+
         # We do this for numpy broadcasting magic
         weights = weights[np.newaxis, :, np.newaxis]
 
@@ -282,18 +297,18 @@ class SensorData(object):
         with np.errstate(divide='ignore', invalid='ignore'):
             pitchAngleSpectra = np.sum(self.dataR * weights * nanmask, axis=1)\
                                 / np.sum(weights * nanmask, axis=1)
-        
+
         pitchAngleSpectra[pitchAngleSpectra == 0.] = np.nan
-        
+
         self.pitchAngleSpectra = pd.DataFrame(
             index=self.times,
             columns=['PAbin_{:d}'.format(x) for x in range(len(self.paBins) - 1)],
             data=pitchAngleSpectra.T)
-        
+
 
     def rebin_to_perpparallel(self, m=m_e):
         """
-        Using the pitchangle to rebin the data from 
+        Using the pitchangle to rebin the data from
             (PA, E, time) to (vPerp, vParallel, time)
         """
         # Reprocessed data has dimensions (nPA, nE, time)
@@ -301,13 +316,13 @@ class SensorData(object):
         pitchAnglesMid = 0.5 * (self.paBins[1:] + self.paBins[:-1])
         energiesMid = np.sqrt(self.energyBins[1:] * self.energyBins[:-1])
         speeds = np.sqrt(2 * energiesMid * e / m)
-        
+
         paMesh, vMesh = np.meshgrid(pitchAnglesMid, speeds, indexing='ij')
         paMesh *= np.pi / 180.
 
         vPerp = vMesh * np.sin(paMesh)
         vParallel = vMesh * np.cos(paMesh)
-        
+
         pass
 
 
@@ -316,13 +331,13 @@ class SensorData(object):
 
     def calc_accumulation_time_seconds(self):
         fmt = "%Y-%jT%H:%M:%S.%f"
-        zipped = zip(self.data_raw['DIM0_UTC_UPPER'], 
+        zipped = zip(self.data_raw['DIM0_UTC_UPPER'],
                      self.data_raw['DIM0_UTC_LOWER'])
-        
+
         self.accumulationTime = np.array([
             (dt.datetime.strptime(x, fmt) - dt.datetime.strptime(y, fmt))\
                 .total_seconds() for x, y in zipped])
-    
+
     def valid_times_copy(self, times):
         """
         Data present in sensors that will need to be truncated.
@@ -347,7 +362,7 @@ class SensorData(object):
             x.pitchAngleSpectra = x.pitchAngleSpectra.iloc[indices, :].copy()
         except AttributeError:
             pass
-        
+
         try:
             x.dataR = x.dataR[:, :, indices]
             x.uncertaintyR = x.uncertaintyR[:, :, indices]
@@ -355,7 +370,3 @@ class SensorData(object):
             pass
 
         return x
-        
-
-
-

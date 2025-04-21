@@ -1,21 +1,36 @@
+# junopy - A Python API for the Juno spacecraft's particle and fields datasets.
+# Copyright (C) 2018  Yash Sarkango
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-This module contains code to calculate the geometric factor for the different
-JADE sensors. The way to calculate the geometric factor varies for 
+This submodule contains code to calculate the geometric factor for the different
+JADE sensors. The way to calculate the geometric factor varies for
     - High Rate electrons Geff(Anode, Energy, time)
     - Low Rate electrons Geff()
-    - High / Low Rate Ions 
+    - High / Low Rate Ions
 
-The general equation is - 
+The general equation is -
 
 G(delta, E, Anode, time) = G_simulations \
     * maxEpsilon \
     * [1 - exp(-k * Eratio**(1-n) * (1 - exp(-rho * Eratio**n))] \
     * tau(time) \
-    * D(delta) \ 
+    * D(delta) \
     * F(anode)
 
 Eratio = E / maxE
-    
+
 Here (maxEpsilon, k, maxE, rho, n) depend on sensor only.
      (tau) depends only on time of measurement
      D(delta) depends on deflection angle and sensor
@@ -78,7 +93,7 @@ def calc_time_correction_tau(t, sensorConst):
     refTime2 = dt.datetime(2019, 5, 22)
     deltat1 = (t - refTime1).total_seconds() / (3600 * 24 * 365)
     deltat2 = (t - refTime2).total_seconds() / (3600 * 24 * 365)
-    
+
     if deltat1 < 0:
         return c['tau0_t0']
     elif deltat2 < 0:
@@ -112,4 +127,3 @@ def calc_sensor_dependence_exp(sensorConst, energies):
     innerExp = 1 - np.exp(-c['rho'] * (energies / c['maxE'])**c['n'])
     return c['maxEpsilon'] \
         * (1 - np.exp(-c['k'] * (energies / c['maxE'])**(1 - c['n']) * innerExp))
-

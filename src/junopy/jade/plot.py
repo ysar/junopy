@@ -1,3 +1,20 @@
+"""
+junopy - A Python API for the Juno spacecraft's particle and fields datasets.
+Copyright (C) 2018  Yash Sarkango
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""
 import numpy as np
 import datetime as dt
 
@@ -7,22 +24,22 @@ from matplotlib import colors
 
 
 def plot_timeseries_spectra(
-        dfSpectra, bins, ax, 
-        vmin=None, vmax=None, cmap=None, zorder=1, 
+        dfSpectra, bins, ax,
+        vmin=None, vmax=None, cmap=None, zorder=1,
         plotcolorbar=True, cbarlabel=None):
-    
+
     # x data is time bins
     times = dfSpectra.index.to_pydatetime()
     deltaT = times[1] - times[0]
     timeBins = (times - deltaT)
     timeBins = np.append(
         timeBins, timeBins[-1] + (timeBins[1] - timeBins[0]))
-    
+
     # y data is just passed bins
 
     # z data are spectral values
     z = dfSpectra.values.T
-    
+
     # Correct for non-contigous data.
     for i in range(len(times)):
         if (timeBins[i + 1] - timeBins[i]).total_seconds() > 301:
@@ -31,20 +48,20 @@ def plot_timeseries_spectra(
     if not vmin and not vmax:
         def get_percentile(arr, p):
             return np.exp(np.percentile(np.log(arr[arr > 0 & ~np.isnan(arr)]), p))
-        
+
         vmin = get_percentile(z, 1)
         vmax = get_percentile(z, 99)
 
     norm = colors.LogNorm(vmin=vmin, vmax=vmax)
-    
+
     if not cmap:
         cmap = "turbo"
 
     cmap = mpl.colormaps.get_cmap(cmap)
-    cmap.set_bad(color='0.5')  
+    cmap.set_bad(color='0.5')
 
 
-    
+
     mp = ax.pcolormesh(
         timeBins, bins, z, norm=norm, cmap=cmap, zorder=zorder)
 
@@ -84,12 +101,12 @@ def plot_energy_pa_spectra(
     if not vmin and not vmax:
         def get_percentile(arr, p):
             return np.exp(np.percentile(np.log(arr[arr > 0 & ~np.isnan(arr)]), p))
-        
+
         vmin = get_percentile(z, 1)
         vmax = get_percentile(z, 99)
 
     mp = ax.pcolormesh(
-        sensorData.paBins, sensorData.energyBins, z, 
+        sensorData.paBins, sensorData.energyBins, z,
         norm=norm(vmin=vmin, vmax=vmax), cmap=cmap)
 
     ax.set_ylim([sensorData.energyBins[0], sensorData.energyBins[-1]])
@@ -108,16 +125,16 @@ def plot_energy_pa_spectra(
 
 def plot_anode_energy_time_spectra(
         axs, sensorData, data='data',
-        vmin=None, vmax=None, cmap=None, zorder=1, 
+        vmin=None, vmax=None, cmap=None, zorder=1,
         plotcolorbar=True, locator=None):
-    
+
     # x data is time bins
     times = sensorData.times
     deltaT = times[1] - times[0]
     timeBins = (times - deltaT)
     timeBins = np.append(
         timeBins, timeBins[-1] + (timeBins[1] - timeBins[0]))
-    
+
     # y data are the energy bins
     y = sensorData.energyBins
 
@@ -132,12 +149,12 @@ def plot_anode_energy_time_spectra(
     elif data == 's/n':
         sensorData.data_raw['DATA'][np.isnan(sensorData.data_raw['DATA'])] = 0.
         d = sensorData.data_raw['DATA'] / sensorData.data_raw['BACKGROUND']
-    
+
     if not data == 'pitchangle':
         if not vmin and not vmax:
             def get_percentile(arr, p):
                 return np.exp(np.percentile(np.log(arr[arr > 0 & ~np.isnan(arr)]), p))
-            
+
             vmin = get_percentile(d, 1)
             vmax = get_percentile(d, 99)
 
@@ -157,7 +174,7 @@ def plot_anode_energy_time_spectra(
             axs[i, j].set_xlabel("Time")
             axs[i, j].set_ylabel("Energy [eV]")
             axs[i, j].text(
-                0.1, 0.8, f"Anode={iAnode}", backgroundcolor='w', 
+                0.1, 0.8, f"Anode={iAnode}", backgroundcolor='w',
                 transform=axs[i, j].transAxes, fontsize=7)
             if locator:
                 axs[i, j].xaxis.set_major_locator(locator)

@@ -27,6 +27,3 @@ SPICE kernels.)
 ### Supported Coordinate Systems
 
 The following coordinate systems are supported by JunoPy for the
-
-::: junopy.mag.MagData
-    handler: python

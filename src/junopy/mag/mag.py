@@ -21,8 +21,9 @@ import pandas as pd
 import copy
 import spiceypy
 import logging
-import matplotlib as mpl
+
 from typing import Optional, Any
+from matplotlib import axes
 
 from junopy import spice
 from junopy import index
@@ -64,7 +65,9 @@ class MagData(object):
             logging.info(f"Reading mag file - {filename}")
             if is_hdf:
                 self.filename = filename
-                self.df = pd.read_hdf(filename)
+                _df = pd.read_hdf(filename)
+                assert isinstance(_df, pd.DataFrame)
+                self.df = _df
             else:
                 self.filename = filename
                 self._parse_mag_file()
@@ -75,6 +78,9 @@ class MagData(object):
         # Filter the result based on the starting and stopping times.
         if start and stop:
             self.df = self.df.loc[start: stop].copy()
+
+        # Default origin is JUPITER
+        self.origin = "JUPITER"
 
         # Convert to a coordinate system recognized by SPICE.
         if coordsystem:
@@ -181,7 +187,7 @@ class MagData(object):
             pos[:, 2] = self.df['Z']
         else:
             pos, _ = spice.get_juno_position(
-                self.df.index, coordsystem=self.coordsystem)
+                [x.to_pydatetime() for x in self.df.index], coordsystem=self.coordsystem)
 
 
         self.df['R'], self.df['LT'], self.df['Latitude'] = \
@@ -206,58 +212,70 @@ class MagData(object):
     def convert_to_coordsystem(
         self,
         out_coordsystem: str = 'JUNO_JSS',
-        use_mag_coords: bool = True
+        use_mag_coords: bool = True,
+        new_origin: str = 'JUPITER'
     ) -> None :
-        logging.info("Converting from/to coordinate system - {:s}/{:s} ..."
-                      .format(self.coordsystem, out_coordsystem))
+        """
+        Converts the magnetometer data (X, Y, Z, Bx, By, Bz) and (R, Theta,
+        Phi, Br, Btheta, Bphi) to another coordinate system.  Data within the
+        `.df` attribute will be converted to this new system.
 
-        # spice_load_kernels()
+        Args:
+            out_coordsystem (str): Coordinate system to convert to.  Must be
+                recognizable by SPICE.
+            use_mag_coords (bool): Whether to use the coordinates provided in
+                the magnetometer data file instead of SPICE.
+            new_origin (str): The origin of the new coordinate system.  Must be
+                recognizable by SPICE.
+        """
+        logging.info("Coordinate system conversion from {:s} to {:s}"
+                     .format(self.coordsystem, out_coordsystem))
 
-        def tmp_func_convert(row, outCoord=out_coordsystem):
+        def _convert(row):
 
-            et = spiceypy.str2et(row.name.strftime('%Y-%m-%dT%H:%M:%S.%f'))
+            et = spiceypy.str2et(row.name.strftime("%Y-%m-%dT%H:%M:%S.%f"))
+            assert isinstance(et, float)
 
             # Origin offset between the two coordinate systems
-            origin_offset =
+            origin_offset = spiceypy.spkpos(
+                new_origin, et, self.coordsystem, "NONE", self.origin)
 
+            # Apply the translation operation to the new origin
+            pos = np.array([row['X'], row['Y'], row['Z']])
+            pos = pos - origin_offset
 
-
+            # Rotate the translated system.
             rotation_matrix = spiceypy.pxform(self.coordsystem, out_coordsystem, et)
             b_prev = np.array([row['Bx'], row['By'], row['Bz']])
-            pos = np.array([row['X'], row['Y'], row['Z']])
 
             pos_rotated = np.matmul(rotation_matrix, pos)
             b_rotated = np.matmul(rotation_matrix, b_prev)
 
             return b_rotated, pos_rotated
 
-        t = self.df.apply(tmp_func_convert, axis=1, result_type='expand')
-
-        # Apply translation.
-
-
+        _t = self.df.apply(_convert, axis=1, result_type='expand')
 
         try:
             self.df['Bx'], self.df['By'], self.df['Bz'], \
                 self.df['X'], self.df['Y'], self.df['Z'] \
-                = t[0], t[1], t[2], t[3], t[4], t[5]
+                = _t[0], _t[1], _t[2], _t[3], _t[4], _t[5]
 
         except KeyError:
-            print(t)
+            print(_t)
             print(self.filename)
             raise Exception()
 
-        self.coordsystem = outCoord
-        self.convert_to_spherical(usemagcoords=usemagcoords)
-
-        # spice_unload_kernels()
+        self.coordsystem = out_coordsystem
+        self.origin = new_origin
+        self.convert_to_spherical(use_mag_coords=use_mag_coords)
 
 
     def calculate_bendback(self):
         """
         Calculate bendback angle alpha.
         Note : tan(alpha) / R = (B_phi / (R * B_R)) is often plotted.
-        alpha is the angle between the magnetic field in the (R, phi) plane and the radial direction.
+        alpha is the angle between the magnetic field in the (R, phi) plane and
+        the radial direction.
         """
         self.df['alpha'] = np.arctan2(
             self.df['Bphi'], self.df['Br']) * 180 / np.pi
@@ -266,7 +284,7 @@ class MagData(object):
     def plot(
         self,
         vars: list[str],
-        axs: list[mpl.axes.Axes],
+        axs: list[axes.Axes],
         color: Any = 'k'):
         """
         Plot magnetometer data. Modifies and returns an axes object.
@@ -289,6 +307,8 @@ class MagData(object):
                 'Br': r'$B_r$',
                 'Bmag': r'|B|',
             }
+        else:
+            var_string = dict()
 
         if 'alpha' in vars:
             var_string.update({'alpha': r'$\alpha'})
@@ -327,8 +347,9 @@ def merge_magdata(m1: MagData, m2: MagData) -> MagData:
     """
     m3 = copy.copy(m1)
     m3.df = pd.concat([m1.df, m2.df])
-    m3.df = m3.df.groupby(m3.df.index).agg(np.nanmean)
-
+    _df = m3.df.groupby(m3.df.index).agg(np.nanmean)
+    assert isinstance(_df, pd.DataFrame)
+    m3.df = _df
     return m3
 
 
@@ -336,7 +357,7 @@ def get_mag_data(
         start: dt.datetime,
         stop: dt.datetime,
         do_download: bool = True,
-        coord_system: Optional[str] = None,
+        coordsystem: Optional[str] = None,
         sid: str = 'SS 1 SECOND'
     ) -> MagData:
     """
@@ -350,18 +371,14 @@ def get_mag_data(
         coord_system (str | None): Coordinate system for resulting data.
         sid (str): SID corresponding to the data file, see Usage>Magnetometer
             for different options.
-
     """
-
     magindex = index.IndexFile(dataset='mag')
 
     logging.info(
         f"Getting magnetometer files. do_download = {do_download}")
 
     files = magindex.get_files_between_dates(
-        start, stop,
-        do_download=do_download,
-        sid=sid)
+        start, stop, do_download=do_download, sid=sid)
 
     if not files:
         logging.error("No relevant magnetometer file found on the PDS.")
@@ -384,7 +401,7 @@ def get_mag_data(
                 filename=f,
                 start=start,
                 stop=stop,
-                coordsystem=coord_system
+                coordsystem=coordsystem
             )
         )
 

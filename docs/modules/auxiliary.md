@@ -11,10 +11,7 @@ different directory structures, but the relative path to each file, as well as
 the measurement start and stop times, are stored in the index file for that
 dataset.
 
-### Usage
-
-The `index` module contains a class for reading and operating with INDEX.TAB
-files. First, you need to instantiate an object for the `IndexFile` class.
+First, you need to instantiate an object for the `IndexFile` class.
 
 ```python
 from junopy import index
@@ -47,3 +44,23 @@ data. A table of different `sid` values for each data type is provided in
 each of the module sections.
 
 ## Downloading files
+
+`junopy` uses the following methods to download files, although in most cases
+you will not need to use them directly.  SPICE kernels and PDS3 datasets for
+different instruments get be downloaded uses the more appropriate
+`download_spice_kernels` method or the instruments' respective `IndexFile`
+classes.
+
+```python
+from junopy import utils
+
+files_to_download = [url1, url2, url3]
+outfolder = "foo/"
+outnames = [outfolder + f for f in files_to_download]
+
+utils.download.download_multiple_files(files_to_download, output_files=outnames)
+```
+
+`download_multiple_files` uses different Python threads to download and write
+multiple files simultaneously to disk.  Please use this with caution to prevent
+rate-limit issues with the PDS.

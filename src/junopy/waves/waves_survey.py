@@ -2,6 +2,7 @@
 import numpy as np
 import copy
 import pandas as pd
+from pandas.io.formats.style_render import Optional
 import scipy
 import datetime as dt
 import glob
@@ -9,29 +10,39 @@ import glob
 import matplotlib.colors as colors
 from matplotlib import ticker
 
-from JunoPy import config
-from JunoPy import index
+from junopy import config
+from junopy import index
 
 class WavesData(object):
 
-    def __init__(self, start=None, end=None, filename=None, findcutoff=False, flimits=[]):
+    def __init__(
+        self,
+        start: Optional[dt.datetime] = None,
+        stop: Optional[dt.datetime] = None,
+        filename: Optional[str] = None,
+        freq_limits: tuple[float, float] | None = None
+    ):
         """
         Class to parse data from the Waves instrument.
+
+        Args:
+            start (dt.datetime | None): Start time for observations.
+            stop (dt.datetime | None): Stop time for observations.
+            filename (str | None): Name of the data file to be read.
+            freq_limits (tuple[float, float]): Limit analysis to these
+                frequencies in Hz.
         """
         if filename:
             self.filename = filename
             self.parse_waves_file()
 
-        if start and end:
+        if start and stop:
             self.df = self.df.loc[start.strftime('%Y-%m-%d %H:%M:%S'):
-                                  end.strftime('%Y-%m-%d %H:%M:%S')].copy()
+                                  stop.strftime('%Y-%m-%d %H:%M:%S')].copy()
 
-        if findcutoff:
-            self.find_cutoff()
-
-        if len(flimits) > 0:
-            self.channels = self.channels[(self.channels['freq'] >= flimits[0]) &
-                                          (self.channels['freq'] <= flimits[1])]
+        if freq_limits:
+            self.channels = self.channels[(self.channels['freq'] >= freq_limits[0]) &
+                                          (self.channels['freq'] <= freq_limits[1])]
 
     def parse_waves_file(self):
         """

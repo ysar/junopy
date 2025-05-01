@@ -21,16 +21,11 @@ import pandas as pd
 import datetime as dt
 import glob
 
-import numpy.ma as ma
-
 import matplotlib.colors as colors
 
 from scipy.constants import m_e, m_p, e
 
-from JunoPy.spice import get_juno_position
-from JunoPy.library import cxcs_Hplus_O, cxcs_Hplus_H2
-from JunoPy.library import cxcs_Hplus_Oplus, cxcs_Hplus_Oplusplus
-from JunoPy.library import cxcs_Hplus_Splus, cxcs_Hplus_Splusplus
+from junopy.spice import get_juno_position
 
 
 class JediData:
@@ -546,83 +541,6 @@ class JediData:
         #     self.energyflux = self.energyflux\
         #         .resample(self.dtbin, offset=self.dtbin/2)\
         #         .agg(np.nanmean)
-
-
-    def calc_cx_rate(self):
-        """
-        Integrate the intensity over solid angles
-        i.e. convert from
-        [s-1 cm-2 str-1 keV-1] to [s-1 cm-2 keV-1].
-        We will need to use df_raw as the pitchangle dataframe is reduced in
-        energy space already.
-        """
-        assert (self.units == 'FLUX')
-
-        cxrate = pd.DataFrame(
-            0,
-            index=self.df_raw.index,
-            columns=['Ebin_{:d}'.format(x) for x in range(self.nEbins)])
-
-        if self.cxtype == 'Hplus-O':
-            cxcs = cxcs_Hplus_O
-        elif self.cxtype == 'Hplus-H2':
-            cxcs = cxcs_Hplus_H2
-        elif self.cxtype == 'Hplus-Oplus':
-            cxcs = cxcs_Hplus_Oplus
-        elif self.cxtype == 'Hplus-Oplusplus':
-            cxcs = cxcs_Hplus_Oplusplus
-        elif self.cxtype == 'Hplus-Splus':
-            cxcs = cxcs_Hplus_Splus
-        elif self.cxtype == 'Hplus-Splusplus':
-            cxcs = cxcs_Hplus_Splusplus
-
-        for j in range(self.nEbins):
-            # For each energy bin, calculate Flux
-
-            meta = self.metadata.copy()
-
-            meta['deltaE'] = meta['Ehigh'] - meta['Elow']
-            meta['dE'] = np.minimum(meta['Ehigh'], self.energybins[j + 1]) - \
-                         np.maximum(meta['Elow'],  self.energybins[j])
-
-            meta = meta[~(meta['dE'] < 0)]
-
-            # Now we know the energy channels that are present within the j-th
-            # energy bin. Knowing this, we can identify the equatorial pitch
-            # angle associated with each energy channel.
-
-            dEsum = np.zeros(len(self.df_raw.index))
-
-            for _, row in meta.iterrows():
-
-                scope = row['channel'][:2]    # Get telescope ID for E channel
-                eqpa = self.df_raw.loc[:, 'EQPitch_Angle_{:s}'.format(scope)]\
-                    .astype(float).values
-
-                # This is the solid angle of the measurement at a particular
-                # pitch angle, given that JEDI-I has an angular resolution of
-                # approximately 26.7 degrees.
-                deltaSigma = 4 * np.pi * np.sin(eqpa * np.pi / 180) \
-                             * np.sin(13.35 * np.pi / 180)
-
-                # Need to ignore NaN values while summing
-                # (that is done automatically)
-                dEsum[~np.isnan(deltaSigma)] += row['dE']
-                deltaSigma[np.isnan(deltaSigma)] = 0
-
-                intensities = self.df_raw.loc[:, row['channel']] # .fillna(0)
-
-                # deltaFlux = Intensity * deltaSolidAngle
-                Eeff = np.sqrt(row['Ehigh'] * row['Elow'])
-                cxrate['Ebin_{:d}'.format(j)] += intensities * deltaSigma * \
-                    cxcs(Eeff) * 1e-16 * row['deltaE'] * row['dE'] * 2
-                    # Multiply by 2 to account for full-sky
-
-            cxrate['Ebin_{:d}'.format(j)] /= dEsum # meta['dE'].sum()
-
-        cxrate.replace(0, np.nan, inplace=True)
-        self.cxrate = cxrate
-        self.hasCXrate = True
 
 
     def plot_spectra(

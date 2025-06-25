@@ -48,8 +48,8 @@ each of the module sections.
 `junopy` uses the following methods to download files, although in most cases
 you will not need to use them directly.  SPICE kernels and PDS3 datasets for
 different instruments get be downloaded uses the more appropriate
-`download_spice_kernels` method or the instruments' respective `IndexFile`
-classes.
+[junopy.spice.download_juno_kernels][] method or the instruments' respective
+[junopy.index.IndexFile][] classes.
 
 ```python
 from junopy import utils

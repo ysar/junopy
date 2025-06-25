@@ -74,11 +74,16 @@ class ConfigVars:
         cls.__config["ROOT_DIR"] = abs_path
         logging.info(f"Root directory changed to {cls.__config['ROOT_DIR']}")
 
-        cls._update_dependent_vars(create_dirs=create_dirs)
+        cls.update_dependent_vars(create_dirs=create_dirs)
 
     @classmethod
-    def _update_dependent_vars(cls, create_dirs: bool = False) -> None:
-        """Update all directory paths based on the current root directory."""
+    def update_dependent_vars(cls, create_dirs: bool = False) -> None:
+        """
+        Update all directory paths based on the current root directory.
+
+        Args:
+            create_dirs (bool): Whether to create a new directory.
+        """
         root_dir = cls.__config["ROOT_DIR"]
 
         # Update all directory paths
@@ -98,4 +103,4 @@ class ConfigVars:
         return cls.__config.copy()
 
 # Initialize the configuration
-ConfigVars._update_dependent_vars()
+ConfigVars.update_dependent_vars()

@@ -136,3 +136,4 @@ dmypy.json
 *.png
 *.DS_Store
 *Juno-footprints
+.zed

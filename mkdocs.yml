@@ -3,6 +3,11 @@ repo_url: "https://github.com/ysar/JunoPy"
 
 nav:
   # - Home: index.md
+  - About:
+      - about/index.md
+      - License: about/license.md
+      - Release Notes: about/release-notes.md
+      - Contributing: about/contributing.md
   - Getting Started: getting-started.md
   - Usage:
       - Magnetometer: modules/magnetometer.md
@@ -25,12 +30,6 @@ nav:
           - utils.convert: api/utils/convert.md
           - utils.field: api/utils/field.md
           - utils.misc: api/utils/misc.md
-  - About:
-      - about/index.md
-      - License: about/license.md
-      - Release Notes: about/release-notes.md
-      - Contributing: about/contributing.md
-
 theme:
   name: "material"
   palette:

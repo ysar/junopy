@@ -129,9 +129,7 @@ dmypy.json
 .pyre/
 
 # Other stuff
-*data*
-*index*
-*spice*
+project*
 *out_*
 *.png
 *.DS_Store

@@ -5,23 +5,27 @@ authors = [{ name = "Yash Sarkango" }]
 
 description = "A package to use plasma and fields data from the Juno spacecraft."
 readme = "README.md"
-requires-python = ">=3.10"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: GPL-3.0-only",
-    "Operating System :: OS Independent",
+requires-python = ">=3.12"
+dependencies = [
+    "isal>=1.7.2",
+    "jupitermag>=1.4.1",
+    "matplotlib>=3.10.3",
+    "numpy>=2.3.1",
+    "pandas>=2.3.0",
+    "scipy>=1.16.0",
+    "spiceypy>=6.0.1",
+    "tables>=3.10.2",
 ]
 
-dependencies = [
-    "numpy",
-    "matplotlib",
-    "pandas",
-    "scipy",
-    "spiceypy",
-    "h5py",
-    "pytest",
-    "mkdocs",
-    "pymdown-extensions",
-    "isal",
-    "JupiterMag",
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.6.14",
+    "mkdocstrings-python>=1.16.12",
+    "pytest>=8.4.1",
 ]
+

@@ -3,9 +3,6 @@ from pathlib import Path
 from junopy import utils
 from junopy import config
 
-CURRENT_DIR = Path(__file__).parent
-config.ConfigVars.set_root(CURRENT_DIR)
-
 class TestDownloadUtils:
 
     def test_download(self):

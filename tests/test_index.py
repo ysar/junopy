@@ -4,9 +4,6 @@ from pathlib import Path
 from junopy import index
 from junopy import config
 
-CURRENT_DIR = Path(__file__).parent
-config.ConfigVars.set_root(CURRENT_DIR)
-
 def test_download_indexfiles():
     """
     Downloads many index files and their associated data files for each

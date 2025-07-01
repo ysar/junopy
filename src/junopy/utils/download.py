@@ -29,6 +29,7 @@ from junopy import config
 
 DEFAULT_CHUNK_SIZE = 16 * 1024 * 1024
 
+
 def download_file(
     url: str,
     output_file: Path,
@@ -63,10 +64,10 @@ def download_file(
     try:
         # Open URL connection
         with urllib.request.urlopen(url) as response:
-            total_bytes = int(response.headers.get('Content-Length', 0))
+            total_bytes = int(response.headers.get("Content-Length", 0))
 
             # Download in chunks
-            with open(tmp_file, 'wb') as f:
+            with open(tmp_file, "wb") as f:
                 while True:
                     chunk = response.read(chunk_size)
                     if not chunk:
@@ -76,7 +77,7 @@ def download_file(
 
                     if show_progress and total_bytes > 0:
                         progress = (downloaded_bytes / total_bytes) * 100
-                        print(f"Downloading... {progress:.1f}%", end='\r')
+                        print(f"Downloading... {progress:.1f}%", end="\r")
 
         # Move temp file to final destination
         tmp_file.replace(output_file)
@@ -101,7 +102,7 @@ def download_multiple_files(
     urls: list[str],
     output_files: list[Path],
     chunk_size: int = DEFAULT_CHUNK_SIZE,
-    num_threads: int = 4
+    num_threads: int = 4,
 ) -> bool:
     """
     Use threading to download multiple files in parallel.
@@ -119,12 +120,13 @@ def download_multiple_files(
     from threading import Thread
 
     assert len(urls) > 0, "URL list cannot be empty"
-    assert len(urls) == len(output_files), \
-        "URLs and output file name lists must have the same length"
+    assert len(urls) == len(
+        output_files
+    ), "URLs and output file name lists must have the same length"
 
     def download_wrapper(url, fOut):
         try:
-            download_file(url, fOut, chunk_size=chunk_size)
+            download_file(url, fOut, chunk_size=chunk_size, show_progress=False)
         except Exception as e:
             print(f"Failed to download {url}: {e}")
 
@@ -144,15 +146,14 @@ def download_multiple_files(
 
         progress = min((i + num_threads) / total_files * 100, 100)
 
-        print(80*'-')
         print(
             f"Parallel download (num_threads={num_threads}) = {progress:.1f}% "
             f"({i + len(chunk_urls)} / {total_files} files)",
-            end="\r"
+            end="\r",
+            flush=True,
         )
 
-    print("\nDownload complete.")
-    print(80 * "-")
+    print(" ... Download complete.")
 
     # Check if all files are present.
     success = True

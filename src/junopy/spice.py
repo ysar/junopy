@@ -54,18 +54,115 @@ class withspiceloaded(ContextDecorator):
             ...
         ```
     """
+
     def __enter__(self):
         spice_dir = config.ConfigVars.get("SPICE_DIR")
-        metafile = spice_dir / 'JunoMetaKernel.txt'
-        spiceypy.furnsh(str(metafile))
+        metafile = spice_dir / "JunoMetaKernel.txt"
+        try:
+            spiceypy.furnsh(str(metafile))
+
+        except spiceypy.utils.exceptions.SpiceNOSUCHFILE:
+            logging.info("A SPICE kernel is missing. Attemping to download ...")
+            download_juno_kernels()
+
+            logging.info("SPICE kernel update successful.")
+            logging.info("Retrying to load SPICE kernels ...")
+            spiceypy.furnsh(str(metafile))
+
+        except Exception as e:
+            logging.error("Failed to load SPICE kernels: %s", e)
+            raise
 
     def __exit__(self, *exc):
         spice_dir = config.ConfigVars.get("SPICE_DIR")
-        metafile = spice_dir / 'JunoMetaKernel.txt'
+        metafile = spice_dir / "JunoMetaKernel.txt"
         spiceypy.unload(str(metafile))
 
+def _split_string_for_spiceypy(input_string: str) -> str:
+    """
+    Split a string into a format that is compatible with SPICEypy.
 
-def download_juno_kernels(do_download: bool = True):
+    Args:
+        input_string (str): The input string to be split.
+
+    Returns:
+        str: The input string split into a format compatible with SPICEypy.
+    """
+    string_len = 70
+
+    if len(input_string) < string_len:
+        return "'" + input_string + "',\n"
+
+    output_string = ""
+    i = 0
+    segment = input_string[:string_len]   
+    while len(segment) == string_len:
+        output_string += "\n    '" + segment + "+',"
+        i += 1
+        segment = input_string[i * string_len : (i + 1) * string_len]
+
+    output_string += "\n    '" + segment + "'"
+    
+        
+    output_string += "\n,\n"
+
+    return output_string
+
+
+
+def identify_juno_kernels() -> list[str]:
+    """
+    Identify the Juno SPICE kernels that are currently available at NAIF.  This
+    method by itself does not download the kernels, only identifies them.
+
+    Returns:
+        list[str]: URLs of the latest Juno SPICE kernels that are available for
+        download.
+    """
+    kernel_urls = []
+
+    # Identify latest files from the fk, lsk, pck, and sclk folders
+    extensions = {"fk": ".tf", "pck": ".tpc", "lsk": ".tls", "sclk": "tsc"}
+
+    for folder in extensions:
+        with urllib.request.urlopen(URL_JUNO_NAIF + f"{folder:s}/") as page:
+            pattern = r'<a href="(\S+)' + '{:s}">'.format(extensions[folder])
+            fname = re.findall(pattern, page.read().decode("UTF-8"))[-1]
+            kernel_urls.append(
+                URL_JUNO_NAIF
+                + "{:s}/{:s}{:s}".format(folder, fname, extensions[folder])
+            )
+
+    # Identify all reconstructed ck files for download
+    folder = "ck"
+    pattern = r'<a href="juno_sc_rec_(1[6-9]|2[0-5])(\S+).bc"'
+    # Note: This Regex pattern is a hack because we only need the
+    # reconstructed ck kernels for years 2016-2025.  May need to modify
+    # this for later years.
+
+    with urllib.request.urlopen(URL_JUNO_NAIF + "ck/") as page:
+        files = re.findall(pattern, page.read().decode("UTF-8"))
+
+    for f in files:
+        kernel_urls.append(URL_JUNO_NAIF + "ck/" + "juno_sc_rec_" + f[0] + f[1] + ".bc")
+
+    # Identify all relevant reconstructed spk files for download
+    folder = "spk"
+    pattern = r'<a href="(\S+).bsp">'
+    with urllib.request.urlopen(URL_JUNO_NAIF + "spk/") as page:
+        files = re.findall(pattern, page.read().decode("UTF-8"))
+
+    for f in files:
+        if f[:3] in ["de4", "jup"] or "spk_rec" in f[:7]:
+            kernel_urls.append(URL_JUNO_NAIF + "spk/" + f + ".bsp")
+
+    # Add the PhiO coordinate system kernel
+    kernel_urls.append(URL_JUNO_NAIF + "../misc/jszalay/juno_phi_o_v1.tf")
+
+    return kernel_urls
+
+
+def download_juno_kernels():
     """
     Downloads all relevant Juno related SPICE kernels into a directory.
 
@@ -80,69 +177,32 @@ def download_juno_kernels(do_download: bool = True):
 
     spice_dir = config.ConfigVars.get("SPICE_DIR")
 
-    kernel_urls = []
+    logging.info("Checking for missing SPICE kernels ...")
 
-    # Identify latest files from the fk, lsk, pck, and sclk folders
-    extensions = {
-        'fk': '.tf',
-        'pck': '.tpc',
-        'lsk': '.tls',
-        'sclk': 'tsc'
-    }
+    kernel_urls = identify_juno_kernels()
+    output_folder = spice_dir / "kernels"
+    output_folder.mkdir(parents=True, exist_ok=True)
 
-    for folder in extensions:
-        with urllib.request.urlopen(URL_JUNO_NAIF + f'{folder:s}/') as page:
-            pattern = r'<a href="(\S+)' + '{:s}">'.format(extensions[folder])
-            fname = re.findall(pattern, page.read().decode("UTF-8"))[-1]
-            kernel_urls.append(
-                URL_JUNO_NAIF
-                + "{:s}/{:s}{:s}".format(folder, fname, extensions[folder])
-            )
+    # Filter out existing files to avoid re-downloading
+    kernel_urls = [
+        url for url in kernel_urls if not (output_folder / url.split("/")[-1]).exists()
+    ]
 
+    output_files = [
+        output_folder / url.split("/")[-1]
+        for url in kernel_urls
+        if not (output_folder / url.split("/")[-1]).exists()
+    ]
 
-    # Identify all reconstructed ck files for download
-    folder = 'ck'
-    pattern = r'<a href="juno_sc_rec_(1[6-9]|2[0-5])(\S+).bc"'
-        # Note: This Regex pattern is a hack because we only need the
-        # reconstructed ck kernels for years 2016-2025.  May need to modify
-        # this for later years.
+    if len(kernel_urls) == 0:
+        logging.info("All Juno SPICE kernels are already downloaded.")
+        return
 
-    with urllib.request.urlopen(URL_JUNO_NAIF + 'ck/') as page:
-        files = re.findall(
-            pattern, page.read().decode('UTF-8'))
-
-    for f in files:
-        kernel_urls.append(
-            URL_JUNO_NAIF + 'ck/' + 'juno_sc_rec_' + f[0] + f[1] + '.bc')
-
-    # Identify all relevant reconstructed spk files for download
-    folder = 'spk'
-    pattern = r'<a href="(\S+).bsp">'
-    with urllib.request.urlopen(URL_JUNO_NAIF + 'spk/') as page:
-        files = re.findall(
-            pattern, page.read().decode('UTF-8'))
-
-    for f in files:
-        if f[:3] in ['de4', 'jup'] or \
-            'spk_rec' in f[:7]:
-            kernel_urls.append(
-                URL_JUNO_NAIF + 'spk/' + f + '.bsp')
-
-    # Add the PhiO coordinate system kernel
-    kernel_urls.append(URL_JUNO_NAIF + "../misc/jszalay/juno_phi_o_v1.tf")
-
-    if do_download:
-        logging.info("Downloading SPICE kernels ...")
-
-        output_folder = spice_dir / "kernels"
-        output_files = [output_folder / url.split("/")[-1] for url in kernel_urls]
-
-        utils.download.download_multiple_files(kernel_urls, output_files=output_files)
-
-    _create_meta_kernel_file(kernel_urls)
+    utils.download.download_multiple_files(kernel_urls, output_files=output_files)
+    _remake_meta_kernel_file(kernel_urls)
 
 
-def _create_meta_kernel_file(kernel_urls: list[str]) -> None:
+def _remake_meta_kernel_file(kernel_urls: list[str]) -> None:
     """
     Create the SPICE meta kernel.
 
@@ -151,26 +211,23 @@ def _create_meta_kernel_file(kernel_urls: list[str]) -> None:
     """
     spice_dir = config.ConfigVars.get("SPICE_DIR")
     logging.info("Creating Meta Kernel file ...")
-    metafile = spice_dir / 'JunoMetaKernel.txt'
+    metafile = spice_dir / "JunoMetaKernel.txt"
 
     buffer = "\\begindata\n"
     buffer += "KERNELS_TO_LOAD=(\n"
     for kernel in kernel_urls:
-        buffer += "'"
-        buffer += str(spice_dir / "kernels" / kernel.split('/')[-1])
-        buffer += "',\n"
+        kernel_name = str((spice_dir / "kernels" / kernel.split("/")[-1]).absolute())
+        buffer += _split_string_for_spiceypy(kernel_name)
 
     buffer += ")\n\\begintext\n"
 
-    with open(metafile, 'w') as f:
+    with open(metafile, "w") as f:
         f.write(buffer)
 
 
 @withspiceloaded()
 def get_juno_position(
-    times: Sequence[dt.datetime],
-    coordsystem: str = "JUNO_JSS",
-    center: str ="JUPITER"
+    times: Sequence[dt.datetime], coordsystem: str = "JUNO_JSS", center: str = "JUPITER"
 ) -> tuple[np.ndarray, float | np.ndarray]:
     """
     Fetch juno position for a list of spacecraft times.
@@ -187,17 +244,19 @@ def get_juno_position(
     num_times = len(times)
     times_et = np.zeros(num_times)
     for i, time in enumerate(times):
-        times_et[i] = \
-            spiceypy.str2et(dt.datetime.strftime(time, '%Y-%m-%dT%H:%M:%S.%f'))
+        times_et[i] = spiceypy.str2et(
+            dt.datetime.strftime(time, "%Y-%m-%dT%H:%M:%S.%f")
+        )
 
     position, light_times = spiceypy.spkpos(
-        'Juno', times_et, coordsystem, 'NONE', center)
+        "Juno", times_et, coordsystem, "NONE", center
+    )
 
     spiceypy.kclear()
 
-    if 'JUPITER' in center:
+    if "JUPITER" in center:
         position = np.asarray(position) / R_JUPITER
-    elif '503' in center or 'GANYMEDE' in center:
+    elif "503" in center or "GANYMEDE" in center:
         position = np.asarray(position) / R_GANYMEDE
 
     return position, light_times
@@ -207,8 +266,9 @@ def get_juno_position(
 def get_object_position(
     times: list[dt.datetime],
     object: str,
-    coordsystem: str = 'JUNO_JSS',
-    center: str = 'JUPITER'):
+    coordsystem: str = "JUNO_JSS",
+    center: str = "JUPITER",
+):
     """
     Fetch object position for a list of spacecraft times.
     Similar to `get_juno_position` but for any object recognized by SPICE.
@@ -226,17 +286,19 @@ def get_object_position(
     num_times = len(times)
     times_et = np.zeros(num_times)
     for i, time in enumerate(times):
-        times_et[i] = \
-            spiceypy.str2et(dt.datetime.strftime(time, '%Y-%m-%dT%H:%M:%S.%f'))
+        times_et[i] = spiceypy.str2et(
+            dt.datetime.strftime(time, "%Y-%m-%dT%H:%M:%S.%f")
+        )
 
     position, light_times = spiceypy.spkpos(
-        object, times_et, coordsystem, 'NONE', center)
+        object, times_et, coordsystem, "NONE", center
+    )
 
     spiceypy.kclear()
 
-    if 'JUPITER' in center:
+    if "JUPITER" in center:
         position = np.asarray(position) / R_JUPITER
-    elif '503' in center or 'GANYMEDE' in center:
+    elif "503" in center or "GANYMEDE" in center:
         position = np.asarray(position) / R_GANYMEDE
 
     return position, light_times

@@ -23,6 +23,7 @@ from junopy import config
 from junopy import utils
 from junopy.constants import DATA_IDS, PDS_URL, EXTENSIONS, TIME_FORMATS
 
+
 class IndexFile:
     """
     Operates on PDS repository index files to fetch and parse data file URLs.
@@ -41,7 +42,8 @@ class IndexFile:
             raise ValueError("Dataset must be specified.")
         if dataset not in DATA_IDS:
             raise ValueError(
-                f"Invalid dataset: {dataset}. Valid options: {list(DATA_IDS.keys())}")
+                f"Invalid dataset: {dataset}. Valid options: {list(DATA_IDS.keys())}"
+            )
 
         self.dataset = dataset
 
@@ -56,7 +58,6 @@ class IndexFile:
 
         # Parse the index file
         self.df: pd.DataFrame = self.parse_index_file()
-
 
     def download_index_file(self) -> None:
         """
@@ -78,7 +79,6 @@ class IndexFile:
                 temp_file.unlink()
             raise RuntimeError(f"Failed to download index file: {e}")
 
-
     def parse_index_file(self) -> pd.DataFrame:
         """
         Parses the index file into a DataFrame.
@@ -88,17 +88,23 @@ class IndexFile:
         """
         logging.info(f"Parsing index file for {self.dataset.upper()}...")
         columns = [
-            'VOLUME_ID', 'SID', 'DATA_SET_ID', 'PRODUCT_ID',
-            'START_TIME', 'STOP_TIME', 'FILE_SPECIFICATION_NAME',
-            'CR_DATE', 'PRODUCT_LABEL_MD5CHECKSUM'
+            "VOLUME_ID",
+            "SID",
+            "DATA_SET_ID",
+            "PRODUCT_ID",
+            "START_TIME",
+            "STOP_TIME",
+            "FILE_SPECIFICATION_NAME",
+            "CR_DATE",
+            "PRODUCT_LABEL_MD5CHECKSUM",
         ]
 
         try:
             df = pd.read_csv(
                 self.index_file,
-                sep='\t',  # PDS index files are typically tab-separated
+                sep="\t",  # PDS index files are typically tab-separated
                 names=columns,
-                parse_dates=['START_TIME', 'STOP_TIME'],
+                parse_dates=["START_TIME", "STOP_TIME"],
                 date_format=TIME_FORMATS[self.dataset],
                 skiprows=1,
                 dtype=str,
@@ -106,7 +112,6 @@ class IndexFile:
             return df
         except Exception as e:
             raise RuntimeError(f"Failed to parse index file: {e}")
-
 
     def get_files_between_dates(
         self,
@@ -141,18 +146,17 @@ class IndexFile:
             stop = pd.to_datetime(stop)
 
         # Filter by date range
-        mask = (
-            (self.df['START_TIME'] <= stop) &
-            (self.df['STOP_TIME'] >= start)
-        )
+        mask = (self.df["START_TIME"] <= stop) & (self.df["STOP_TIME"] >= start)
         if sid:
-            mask &= self.df['SID'].str.contains(sid)
+            mask &= self.df["SID"].str.contains(sid)
 
         if self.dataset == "waves-survey":
             for s in ["BINT", "BUNC", "EINT", "EUNC"]:
                 mask &= not self.df["PRODUCT_ID"].str.contains(s)
 
-        df_filtered = self.df[mask, ["FILE_SPECIFICATION_NAME", "START_TIME", "STOP_TIME"]]
+        df_filtered = self.df[
+            mask, ["FILE_SPECIFICATION_NAME", "START_TIME", "STOP_TIME"]
+        ]
         assert isinstance(df_filtered, pd.DataFrame)
 
         # Prepare file lists
@@ -166,14 +170,12 @@ class IndexFile:
         for row in df_filtered.itertuples():
             # Build URL and output path
             file_spec = row.FILE_SPECIFICATION_NAME.strip()
-            file_url = (
-                f"{PDS_URL}/{data_id}/{file_spec[:-4]}{extension}"
-            )
+            file_url = f"{PDS_URL}/{data_id}/{file_spec[:-4]}{extension}"
             file_path = (
-                data_dir /
-                row.START_TIME.strftime('%Y') /
-                row.STOP_TIME.strftime('%j') /
-                file_url.split('/')[-1]
+                data_dir
+                / row.START_TIME.strftime("%Y")
+                / row.STOP_TIME.strftime("%j")
+                / file_url.split("/")[-1]
             )
 
             file_urls.append(file_url)
@@ -193,20 +195,22 @@ class IndexFile:
 
             # Skip if file exists in any allowed format
             if any(
-                p.exists() for p in [
+                p.exists()
+                for p in [
                     path,
-                    path.with_suffix('.hdf5'),
-                    path.with_suffix(path.suffix + '.gz')
-                ]):
+                    path.with_suffix(".hdf5"),
+                    path.with_suffix(path.suffix + ".gz"),
+                ]
+            ):
                 continue
 
             download_urls.append(url)
             download_paths.append(path)
 
             # Handle LBL files if requested
-            if get_label and not path.with_suffix('.LBL').exists():
-                lbl_urls.append(url[:-4] + '.LBL')
-                lbl_paths.append(path.with_suffix('.LBL'))
+            if get_label and not path.with_suffix(".LBL").exists():
+                lbl_urls.append(url[:-4] + ".LBL")
+                lbl_paths.append(path.with_suffix(".LBL"))
 
         # Combine all downloads
         all_urls = download_urls + lbl_urls

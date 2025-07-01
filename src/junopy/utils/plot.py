@@ -22,19 +22,18 @@ from junopy import spice
 from . import convert
 from . import field
 
+
 def find_ticks_between(
-    start: dt.datetime,
-    end: dt.datetime,
-    nticks: int = 6
-    ) -> tuple[pd.DatetimeIndex, list[str]]:
+    start: dt.datetime, end: dt.datetime, nticks: int = 6
+) -> tuple[pd.DatetimeIndex, list[str]]:
     """
     Given an axes object make the ticks appropriately for subplots.
     """
-    time_array = pd.date_range(
-        start=start, end=end, periods=nticks).to_pydatetime().tolist()
+    time_array = (
+        pd.date_range(start=start, end=end, periods=nticks).to_pydatetime().tolist()
+    )
 
     position, _ = spice.get_juno_position(time_array)
-
 
     tickstring = []
     for i, pos in enumerate(position):
@@ -43,16 +42,24 @@ def find_ticks_between(
 
         if i == 0:
             tickstring.append(
-            'Time - {:s}'.format(time_array[i].strftime('%H:%M:%S')) + '\n' +
-            'R  - {:7.2f}'.format(R) + '\n' +
-            'LT - {:7.2f}'.format(LT) + '\n' +
-            'Latitude - {:7.2f}'.format(Latitude))
+                "Time - {:s}".format(time_array[i].strftime("%H:%M:%S"))
+                + "\n"
+                + "R  - {:7.2f}".format(R)
+                + "\n"
+                + "LT - {:7.2f}".format(LT)
+                + "\n"
+                + "Latitude - {:7.2f}".format(Latitude)
+            )
         else:
             tickstring.append(
-                time_array[i].strftime('%H:%M:%S') + '\n' +
-                '{:7.2f}'.format(R) + '\n' +
-                '{:7.2f}'.format(LT) + '\n' +
-                '{:7.2f}'.format(Latitude))
+                time_array[i].strftime("%H:%M:%S")
+                + "\n"
+                + "{:7.2f}".format(R)
+                + "\n"
+                + "{:7.2f}".format(LT)
+                + "\n"
+                + "{:7.2f}".format(Latitude)
+            )
 
     return time_array, tickstring
 
@@ -61,90 +68,114 @@ def find_ticks_between_GPhiO(start, end, nticks=6):
     """
     Given an axes object make the ticks appropriately for subplots.
     """
-    time_array = pd.date_range(
-        start=start, end=end, periods=nticks).to_pydatetime().tolist()
+    time_array = (
+        pd.date_range(start=start, end=end, periods=nticks).to_pydatetime().tolist()
+    )
 
-    position, _ = spice.get_juno_position(time_array,
-                                    coordsystem='JUNO_GANYMEDE_PHI_O',
-                                    center='503')
-
+    position, _ = spice.get_juno_position(
+        time_array, coordsystem="JUNO_GANYMEDE_PHI_O", center="503"
+    )
 
     tickstring = []
     for i, pos in enumerate(position):
 
         if i == 0:
             tickstring.append(
-                'Time - {:s}'.format(time_array[i].strftime('%H:%M:%S')) + '\n' +
-                'X (R) - {:7.2f}'.format(pos[0]) + '\n' +
-                'Y (R) - {:7.2f}'.format(pos[1]) + '\n' +
-                'Z (R) - {:7.2f}'.format(pos[2]))
+                "Time - {:s}".format(time_array[i].strftime("%H:%M:%S"))
+                + "\n"
+                + "X (R) - {:7.2f}".format(pos[0])
+                + "\n"
+                + "Y (R) - {:7.2f}".format(pos[1])
+                + "\n"
+                + "Z (R) - {:7.2f}".format(pos[2])
+            )
         else:
             tickstring.append(
-                '{:s}'.format(time_array[i].strftime('%H:%M:%S')) + '\n' +
-                '{:7.2f}'.format(pos[0]) + '\n' +
-                '{:7.2f}'.format(pos[1]) + '\n' +
-                '{:7.2f}'.format(pos[2]))
+                "{:s}".format(time_array[i].strftime("%H:%M:%S"))
+                + "\n"
+                + "{:7.2f}".format(pos[0])
+                + "\n"
+                + "{:7.2f}".format(pos[1])
+                + "\n"
+                + "{:7.2f}".format(pos[2])
+            )
 
     return time_array, tickstring
 
 
-
-
 def find_ticks_between_Mshell(
-    start, end, nticks=6, timeformat='%H:%M:%S', appendlabels=True):
+    start, end, nticks=6, timeformat="%H:%M:%S", appendlabels=True
+):
     """
     Given an axes object make the ticks appropriately for subplots.
     We would like to have :
     M shell, Latitude, SIII-Longitude
     """
-    time_array = pd.date_range(
-        start=start, end=end, periods=nticks).to_pydatetime().tolist()
+    time_array = (
+        pd.date_range(start=start, end=end, periods=nticks).to_pydatetime().tolist()
+    )
 
-    position, _ = spice.get_juno_position(time_array, coordsystem='IAU_JUPITER')
-    position_mag, _ = spice.get_juno_position(time_array, coordsystem='JUNO_MAG_VIP4')
+    position, _ = spice.get_juno_position(time_array, coordsystem="IAU_JUPITER")
+    position_mag, _ = spice.get_juno_position(time_array, coordsystem="JUNO_MAG_VIP4")
 
     tickstring = []
     for i, pos in enumerate(position):
 
         M, _, lon = field.get_M_shell(pos[0], pos[1], pos[2])
 
-        mlat = np.arctan2(
-            position_mag[i, 2],
-            np.sqrt(position_mag[i, 0]**2 + position_mag[i, 1]**2)) \
-                * 180 / np.pi
+        mlat = (
+            np.arctan2(
+                position_mag[i, 2],
+                np.sqrt(position_mag[i, 0] ** 2 + position_mag[i, 1] ** 2),
+            )
+            * 180
+            / np.pi
+        )
 
-        r = np.sqrt(pos[0]**2 + pos[1]**2 + pos[2]**2)
+        r = np.sqrt(pos[0] ** 2 + pos[1] ** 2 + pos[2] ** 2)
 
         if i == 0 and appendlabels:
             tickstring.append(
-            'Time   {:s}'.format(time_array[i].strftime(timeformat)) + '\n' +
-            'R     {:7.2f}'.format(r) + '\n' +
-            'M     {:7.2f}'.format(M) + '\n' +
-            'MLat   {:7.2f}'.format(mlat) + '\n' +
-            'Lon   {:7.2f}'.format(lon))
+                "Time   {:s}".format(time_array[i].strftime(timeformat))
+                + "\n"
+                + "R     {:7.2f}".format(r)
+                + "\n"
+                + "M     {:7.2f}".format(M)
+                + "\n"
+                + "MLat   {:7.2f}".format(mlat)
+                + "\n"
+                + "Lon   {:7.2f}".format(lon)
+            )
         else:
             tickstring.append(
-                time_array[i].strftime(timeformat) + '\n' +
-                '{:7.2f}'.format(r) + '\n' +
-                '{:7.2f}'.format(M) + '\n' +
-                '{:7.2f}'.format(mlat) + '\n' +
-                '{:7.2f}'.format(lon))
+                time_array[i].strftime(timeformat)
+                + "\n"
+                + "{:7.2f}".format(r)
+                + "\n"
+                + "{:7.2f}".format(M)
+                + "\n"
+                + "{:7.2f}".format(mlat)
+                + "\n"
+                + "{:7.2f}".format(lon)
+            )
 
     return time_array, tickstring
 
 
 def find_ticks_between_deltaAlfven(
-        start, end, satellite='IO', nticks=6, timeformat='%H:%M:%S'):
+    start, end, satellite="IO", nticks=6, timeformat="%H:%M:%S"
+):
     """
     Given an axes object make the ticks appropriately for subplots.
     We would like to have :
     M shell, Latitude, SIII-Longitude
     """
-    time_array = pd.date_range(
-        start=start, end=end, periods=nticks).to_pydatetime().tolist()
+    time_array = (
+        pd.date_range(start=start, end=end, periods=nticks).to_pydatetime().tolist()
+    )
 
-    position, _ = spice.get_juno_position(time_array, coordsystem='IAU_JUPITER')
-    position_mag, _ = spice.get_juno_position(time_array, coordsystem='JUNO_MAG_VIP4')
+    position, _ = spice.get_juno_position(time_array, coordsystem="IAU_JUPITER")
+    position_mag, _ = spice.get_juno_position(time_array, coordsystem="JUNO_MAG_VIP4")
 
     dAlfven = field.calc_delta_alfven_juno(time_array, satellite=satellite)
 
@@ -153,22 +184,34 @@ def find_ticks_between_deltaAlfven(
 
         M, _, _ = field.get_M_shell(pos[0], pos[1], pos[2])
 
-        mlat = np.arctan2(
-            position_mag[i, 2],
-            np.sqrt(position_mag[i, 0]**2 + position_mag[i, 1]**2)) \
-                * 180 / np.pi
+        mlat = (
+            np.arctan2(
+                position_mag[i, 2],
+                np.sqrt(position_mag[i, 0] ** 2 + position_mag[i, 1] ** 2),
+            )
+            * 180
+            / np.pi
+        )
 
         if i == 0:
             tickstring.append(
-            'Time   {:s}'.format(time_array[i].strftime(timeformat)) + '\n' +
-            'M     {:7.2f}'.format(M) + '\n' +
-            'MLat   {:7.2f}'.format(mlat) + '\n' +
-            r'$\Delta\lambda$   {:7.2f}'.format(dAlfven[i]))
+                "Time   {:s}".format(time_array[i].strftime(timeformat))
+                + "\n"
+                + "M     {:7.2f}".format(M)
+                + "\n"
+                + "MLat   {:7.2f}".format(mlat)
+                + "\n"
+                + r"$\Delta\lambda$   {:7.2f}".format(dAlfven[i])
+            )
         else:
             tickstring.append(
-                time_array[i].strftime(timeformat) + '\n' +
-                '{:7.2f}'.format(M) + '\n' +
-                '{:7.2f}'.format(mlat) + '\n' +
-                '{:7.2f}'.format(dAlfven[i]))
+                time_array[i].strftime(timeformat)
+                + "\n"
+                + "{:7.2f}".format(M)
+                + "\n"
+                + "{:7.2f}".format(mlat)
+                + "\n"
+                + "{:7.2f}".format(dAlfven[i])
+            )
 
     return time_array, tickstring

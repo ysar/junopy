@@ -31,8 +31,14 @@ def calc_relativistic_momentum(energy: float, mass: float = m_e) -> float:
     Returns:
         momentum (float): The relativistic momentum of the particle in SI units.
     """
-    return 1. / speed_of_light * np.sqrt(
-        (energy + mass * speed_of_light**2)**2 - mass**2 * speed_of_light**4)
+    return (
+        1.0
+        / speed_of_light
+        * np.sqrt(
+            (energy + mass * speed_of_light**2) ** 2 - mass**2 * speed_of_light**4
+        )
+    )
+
 
 def calc_speed(energy: float, mass: float = m_e) -> float:
     """
@@ -61,7 +67,8 @@ def calc_relativistic_speed(energy: float, mass: float = m_e) -> float:
 
     """
     return speed_of_light * np.sqrt(
-        1. - 1. / (energy / mass / speed_of_light**2 + 1.)**2)
+        1.0 - 1.0 / (energy / mass / speed_of_light**2 + 1.0) ** 2
+    )
 
 
 def calc_relativistic_energy(speed: float, mass: float = m_e) -> float:
@@ -77,15 +84,15 @@ def calc_relativistic_energy(speed: float, mass: float = m_e) -> float:
             using the relativistic equation.
 
     """
-    p = mass * speed / np.sqrt(1 - (speed / speed_of_light)**2)
+    p = mass * speed / np.sqrt(1 - (speed / speed_of_light) ** 2)
 
-    return  np.sqrt((p * speed_of_light)**2 + mass**2 * speed_of_light**4)\
+    return (
+        np.sqrt((p * speed_of_light) ** 2 + mass**2 * speed_of_light**4)
         - mass * speed_of_light**2
+    )
 
 
-def convert_pos_spherical(
-    pos: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def convert_pos_spherical(pos: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Given cartesian coordinates, return the radius, local-time, and latitude.
 
@@ -99,8 +106,8 @@ def convert_pos_spherical(
         local_time (np.ndarray): Local times with shape (N,)
         latitude (np.ndarray): Latitude with shape (N,)
     """
-    radius = np.sqrt(pos[0]**2 + pos[1]**2 + pos[2]**2)
+    radius = np.sqrt(pos[0] ** 2 + pos[1] ** 2 + pos[2] ** 2)
     local_time = 6 / 90 * np.arctan2(pos[1], pos[0]) * 180 / np.pi + 12
-    latitude = np.arctan2(pos[2], np.sqrt(pos[0]**2 + pos[1]**2)) * 180 / np.pi
+    latitude = np.arctan2(pos[2], np.sqrt(pos[0] ** 2 + pos[1] ** 2)) * 180 / np.pi
 
     return radius, local_time, latitude

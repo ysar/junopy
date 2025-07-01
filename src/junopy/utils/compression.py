@@ -28,7 +28,7 @@ def create_gz_zip_file(filename: str) -> None:
             create a new file with the same name with the '.gz' extension.  The
             original file will be removed.
     """
-    with open(filename, 'rb') as f_in:
-        with igzip.open(filename + '.gz', 'wb') as f_out:
+    with open(filename, "rb") as f_in:
+        with igzip.open(filename + ".gz", "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
     os.remove(filename)

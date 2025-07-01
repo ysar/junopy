@@ -18,6 +18,7 @@ import logging
 from typing import Dict
 from pathlib import Path
 
+
 class ConfigVars:
     """
     Centralized configuration management for directory paths.
@@ -26,7 +27,7 @@ class ConfigVars:
     manages dependent directory paths when the root directory changes.
     """
 
-    __config: Dict[str, Path] = {"ROOT_DIR": Path("./").absolute()}
+    __config: Dict[str, Path] = {"ROOT_DIR": Path(".junodata/").absolute()}
 
     # Directory structure template
     __DIR_STRUCTURE = {
@@ -61,7 +62,7 @@ class ConfigVars:
             raise
 
     @classmethod
-    def set_root(cls, value: Path, create_dirs: bool = True) -> None:
+    def set_root(cls, value: Path | str, create_dirs: bool = True) -> None:
         """
         Set the root directory and update all dependent paths.
 
@@ -70,9 +71,14 @@ class ConfigVars:
             create_dirs: Whether to create directories automatically
         """
         # Convert to absolute path and normalize
+        if isinstance(value, str):
+            value = Path(value)
+        elif not isinstance(value, Path):
+            raise TypeError("Root directory must be a string or Path object")
+
         abs_path = value.absolute()
         cls.__config["ROOT_DIR"] = abs_path
-        logging.info(f"Root directory changed to {cls.__config['ROOT_DIR']}")
+        logging.info(f"junopy root directory changed to {cls.__config['ROOT_DIR']}")
 
         cls.update_dependent_vars(create_dirs=create_dirs)
 
@@ -101,6 +107,7 @@ class ConfigVars:
     def get_all(cls) -> Dict[str, Path]:
         """Get a copy of the complete configuration dictionary."""
         return cls.__config.copy()
+
 
 # Initialize the configuration
 ConfigVars.update_dependent_vars()

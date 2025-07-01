@@ -1,16 +1,16 @@
 import numpy as np
 import copy
 import pandas as pd
-import scipy
 import datetime as dt
 import glob
-
+import matplotlib as mpl
 import matplotlib.colors as colors
 
 from typing import Optional
 
 from junopy import config
 from junopy import index
+from junopy.mag import MagData
 
 
 class WavesData(object):
@@ -19,7 +19,7 @@ class WavesData(object):
         start: Optional[dt.datetime] = None,
         stop: Optional[dt.datetime] = None,
         filename: Optional[str] = None,
-        freq_limits: tuple[Optional(float), Optional(float)] = (None, None),
+        freq_limits: tuple[Optional[float], Optional[float]] = (None, None),
     ):
         """
         Class to parse data from the Waves instrument.
@@ -49,7 +49,7 @@ class WavesData(object):
     def parse_waves_file(self):
         """
         Parse a Waves-survey file.
-        2 lines contain nonsense.
+        2 lines contain nonsense. Well not nonsense, but not useful.
         3rd line contains channel names.
         4th line contains channel frequency centers.
         5th line contains channel bandwidths.
@@ -104,56 +104,30 @@ class WavesData(object):
         self.df.set_index(["time"], inplace=True)
         self.df.drop(inplace=True, columns=["SCET", "SCLK (sec)"])
 
-    def limit_freq(self, lower, upper):
+    def limit_freq(self, lower: float, upper: float):
+        """
+        Limit the frequency range of the data to the specified lower and upper bounds.
+
+        Args:
+            lower (float): Lower frequency limit in Hz.
+            upper (float): Upper frequency limit in Hz.
+        """
         self.channels = self.channels[
             (self.channels["freq"] >= lower) & (self.channels["freq"] <= upper)
         ]
 
-    @staticmethod
-    def calc_cutoff(x, freq):
-        intensity = x.values
-
-        maxima = scipy.signal.argrelextrema(intensity, np.greater, order=4)[0]
-        minima = scipy.signal.argrelextrema(intensity, np.less, order=4)[0]
-        maxima = maxima[freq[maxima] > 500][0]
-        minima = minima[freq[minima] > 500][0]
-
-        return 0.5 * (freq[maxima] + freq[minima])
-
-    def find_cutoff(self):
-        """Find the low-frequency cutoff for the continuum radiation"""
-        self.df["cutoff"] = self.df[self.channels["names"]].apply(
-            lambda x: WavesData.calc_cutoff(x, self.channels["freq"].values), axis=1
-        )
-
-    @staticmethod
-    def calc_upperhybrid(x, freq):
-        intensity = x.values
-
-        maxima = scipy.signal.argrelextrema(np.log(intensity), np.greater, order=10)[0]
-        if len(maxima) > 0:
-            return freq[maxima[-1]]
-        else:
-            return np.nan
-
-    def find_upperhybrid(self):
-        """Find the low-frequency cutoff for the continuum radiation"""
-        self.df["UH"] = self.df[self.channels["names"]].apply(
-            lambda x: WavesData.calc_upperhybrid(x, self.channels["freq"].values),
-            axis=1,
-        )
-
     def plot(
         self,
-        ax,
-        mag_data=None,
-        freq_low=5e1,
-        freq_high=20e3,
-        vmin=None,
-        vmax=None,
-        use_log_scale=True,
-        cbar_label="",
-        show_cutoff=False,
+        ax: mpl.Axes,
+        mag_data: MagData = None,
+        freq_low: float = 5e1,
+        freq_high: float = 20e3,
+        vmin: float | None = None,
+        vmax: float | None = None,
+        use_log_scale: bool = True,
+        cbar_label: str = "",
+        show_cutoff: bool = False,
+        plot_fce: bool = False,
         **kwargs,
     ):
         """
@@ -161,15 +135,12 @@ class WavesData(object):
 
         Args:
             ax (mpl.Axes): The matplotlib axes on which to make this plot.
-            mag_data (Optional[junopy.MagData]): The magnetic field data from the
-                Juno magnetometer (optional).
             freq_low (float): The lowest frequency to plot (Hz).
             freq_high (float): The higher frequency to plot (Hz).
             vmin (Optional[float]): The lowest PSD on the colorbar.
             vmax (Optional[float]): The highest PSD on the colorbar.
             use_log_scale (bool): Whether to use log scale on the Y axis
             cbar_label (str): Label for the color bar.
-            show_cutoff (bool): Whether to show the cutoff (if calculated).
             **kwargs: Other arguments to pass to [plt.pcolormesh][]
         """
 
@@ -201,21 +172,7 @@ class WavesData(object):
 
         mp = ax.pcolormesh(
             timearray, ybins, c, norm=colors.LogNorm(vmin=vmin, vmax=vmax), **kwargs
-        )  # , vmin=1e-15, vmax=1e-12)
-        # 14, 10
-
-        if show_cutoff:
-            ax.plot(
-                self.df.index,
-                self.df["cutoff"].values,
-                ".",
-                markersize=1.0,
-                color="m",
-                lw=0.5,
-            )
-
-        if mag_data:
-            ax = mag_data.plot_electron_cyc_freq(ax)
+        )
 
         if use_log_scale:
             ax.set_ylim([freq_low, freq_high])
@@ -267,7 +224,7 @@ def get_waves_data(
     if len(wavesfiles) != 2:
         wavesindex = index.IndexFile(dataset="waves-survey")
         _ = wavesindex.get_files_between_dates(
-            start, end, DoDownload=True, sid="SURVEY"
+            start, end, do_download=True, sid="SURVEY"
         )
 
         wavesfiles = glob.glob(

@@ -41,21 +41,22 @@ def calc_assoc_legendre_poly(theta, N):
 
     n = 1
     P[1, 1] = sintheta * P[n - 1, n - 1]
-    diffP[1, 1] = sintheta * diffP[n - 1, n - 1] + \
-        costheta * P[n - 1, n - 1]
+    diffP[1, 1] = sintheta * diffP[n - 1, n - 1] + costheta * P[n - 1, n - 1]
     P[1, 0] = costheta * P[0, 0]
     diffP[1, 0] = costheta * diffP[0, 0] - sintheta * P[0, 0]
 
     for n in range(2, N + 1):
         P[n, n] = sintheta * P[n - 1, n - 1]
-        diffP[n, n] = sintheta * diffP[n - 1, n - 1] + \
-            costheta * P[n - 1, n - 1]
+        diffP[n, n] = sintheta * diffP[n - 1, n - 1] + costheta * P[n - 1, n - 1]
 
         for m in range(0, n):
-            K[n, m] = ((n - 1)**2 - m**2) / ((2 * n - 1) * (2 * n - 3))
+            K[n, m] = ((n - 1) ** 2 - m**2) / ((2 * n - 1) * (2 * n - 3))
             P[n, m] = costheta * P[n - 1, m] - K[n, m] * P[n - 2, m]
-            diffP[n, m] = costheta * diffP[n - 1, m] - \
-                sintheta * P[n - 1, m] - K[n, m] * diffP[n - 2, m]
+            diffP[n, m] = (
+                costheta * diffP[n - 1, m]
+                - sintheta * P[n - 1, m]
+                - K[n, m] * diffP[n - 2, m]
+            )
 
     return P, diffP
 
@@ -70,7 +71,7 @@ def calc_internal_field(r_a, theta, phi, g, h, N):
     Btheta = 0
     Bphi = 0
 
-    a_r = 1. / r_a
+    a_r = 1.0 / r_a
 
     P, diffP = calc_assoc_legendre_poly(theta, N)
 
@@ -79,8 +80,8 @@ def calc_internal_field(r_a, theta, phi, g, h, N):
     sinphi = np.sin(phi)
     cosphi = np.cos(phi)
     inv_sintheta = 0.0
-    if(np.abs(sintheta) > 1.0e-3):
-        inv_sintheta = 1. / sintheta
+    if np.abs(sintheta) > 1.0e-3:
+        inv_sintheta = 1.0 / sintheta
 
     for n in range(0, N + 1):
 
@@ -88,23 +89,33 @@ def calc_internal_field(r_a, theta, phi, g, h, N):
         sinphi_prev = 0.0
         cosphi_prev = 1.0
         # Psi += a * (a_r)**(n + 1) * P[n, m] * g[n, m]
-        Br += (a_r)**(n + 2) * (n + 1) * P[n, m] * g[n, m]
-        Btheta -= (a_r)**(n + 2) * diffP[n, m] * g[n, m]
-        Bphi += inv_sintheta * (a_r)**(n + 2) * P[n, m] * m * (- h[n, m])
+        Br += (a_r) ** (n + 2) * (n + 1) * P[n, m] * g[n, m]
+        Btheta -= (a_r) ** (n + 2) * diffP[n, m] * g[n, m]
+        Bphi += inv_sintheta * (a_r) ** (n + 2) * P[n, m] * m * (-h[n, m])
 
         for m in range(1, n + 1):
 
             sinmphi = sinphi_prev * cosphi + cosphi_prev * sinphi
             cosmphi = cosphi_prev * cosphi - sinphi_prev * sinphi
 
-            Br += (a_r)**(n + 2) * (n + 1) * P[n, m] * (
-                g[n, m] * cosmphi + h[n, m] * sinmphi)
+            Br += (
+                (a_r) ** (n + 2)
+                * (n + 1)
+                * P[n, m]
+                * (g[n, m] * cosmphi + h[n, m] * sinmphi)
+            )
 
-            Btheta -= (a_r)**(n + 2) * diffP[n, m] * (
-                g[n, m] * cosmphi + h[n, m] * sinmphi)
+            Btheta -= (
+                (a_r) ** (n + 2) * diffP[n, m] * (g[n, m] * cosmphi + h[n, m] * sinmphi)
+            )
 
-            Bphi += inv_sintheta * (a_r)**(n + 2) * P[n, m] * m * (
-                g[n, m] * sinmphi - h[n, m] * cosmphi)
+            Bphi += (
+                inv_sintheta
+                * (a_r) ** (n + 2)
+                * P[n, m]
+                * m
+                * (g[n, m] * sinmphi - h[n, m] * cosmphi)
+            )
 
             sinphi_prev = sinmphi
             cosphi_prev = cosmphi
@@ -124,7 +135,7 @@ def read_coefficients_file(filename, degree=None, doNormalize=False):
     g = np.zeros((N + 1, N + 1))
     h = np.zeros((N + 1, N + 1))
 
-    with open(filename, 'r') as f:
+    with open(filename, "r") as f:
         f.readline()
         for n in range(1, N + 1):
             for m in range(0, n + 1):
@@ -141,7 +152,7 @@ def read_coefficients_file(filename, degree=None, doNormalize=False):
         S[0, 0] = 1
         for n in range(1, N + 1):
             S[n, 0] = S[n - 1, 0] * (2 * n - 1) / n
-            S[n, 1] = S[n, 0] * np.sqrt(n * 2. / (n + 1))
+            S[n, 1] = S[n, 0] * np.sqrt(n * 2.0 / (n + 1))
 
             g[n, 0] = g[n, 0] * S[n, 0]
             h[n, 0] = h[n, 0] * S[n, 0]
@@ -156,17 +167,16 @@ def read_coefficients_file(filename, degree=None, doNormalize=False):
     return g, h, N
 
 
-def calc_currentsheet_field(pos, equation_type='analytic', docurve=True):
+def calc_currentsheet_field(pos, equation_type="analytic", docurve=True):
     if not docurve:
         tilt = 0.001
 
-    def_model = con2020.Model(
-        equation_type=equation_type, xt__cs_tilt_degs=tilt)
+    def_model = con2020.Model(equation_type=equation_type, xt__cs_tilt_degs=tilt)
 
     return def_model.Field(pos[0], pos[1], pos[2])
 
 
-def trace_to_planet(start, g, h, N, deltaS=0.2, scheme='Euler'):
+def trace_to_planet(start, g, h, N, deltaS=0.2, scheme="Euler"):
 
     streamline = np.zeros((10000, 3)) * np.nan
 
@@ -174,14 +184,14 @@ def trace_to_planet(start, g, h, N, deltaS=0.2, scheme='Euler'):
 
     pos = start * 1.0
 
-#     for n in range(1, N + 1):
-#         for m in range(0, n + 1):
-#             if not (n == 1 and m == 0):
-#                 g[n, m] = 0.
-#             # print('g', n, m, g[n,m])
+    #     for n in range(1, N + 1):
+    #         for m in range(0, n + 1):
+    #             if not (n == 1 and m == 0):
+    #                 g[n, m] = 0.
+    #             # print('g', n, m, g[n,m])
 
-#         for m in range(1, n + 1):
-#             h[n, m] = 0.
+    #         for m in range(1, n + 1):
+    #             h[n, m] = 0.
 
     i = 0
     while np.sqrt(np.sum(pos**2)) >= 0.99 and np.sqrt(np.sum(pos**2)) <= 100:
@@ -207,7 +217,7 @@ def trace_to_planet(start, g, h, N, deltaS=0.2, scheme='Euler'):
 
         bunit = np.array([Bx / Bmag, By / Bmag, Bz / Bmag])
 
-        if 'Euler' in scheme:
+        if "Euler" in scheme:
             pos += deltaS * bunit
             streamline[i] = pos * 1.0
             i += 1
@@ -216,7 +226,7 @@ def trace_to_planet(start, g, h, N, deltaS=0.2, scheme='Euler'):
     return streamline
 
 
-def trace_field_bequator(start, g, h, N, deltaS=0.2, scheme='RK4'):
+def trace_field_bequator(start, g, h, N, deltaS=0.2, scheme="RK4"):
 
     pos = start * 1.0
     sign_prev = 1
@@ -228,7 +238,7 @@ def trace_field_bequator(start, g, h, N, deltaS=0.2, scheme='RK4'):
         theta = np.arccos(pos[2] / r_a)
         phi = np.arctan2(pos[1], pos[0])
 
-        Bx_int, By_int, Bz_int = JupiterMag.Internal.Field(pos[0],pos[1],pos[2])
+        Bx_int, By_int, Bz_int = JupiterMag.Internal.Field(pos[0], pos[1], pos[2])
         # calc_internal_field(r_a, theta, phi, g, h, N)
 
         # Bxyz = jovian_jrm33_order13_internal_xyz(pos[0], pos[1], pos[2])
@@ -246,15 +256,14 @@ def trace_field_bequator(start, g, h, N, deltaS=0.2, scheme='RK4'):
 
         bunit = np.array([Bx / Bmag, By / Bmag, Bz / Bmag])
 
-        if 'Euler' in scheme:
+        if "Euler" in scheme:
             pos += deltaS * bunit
-            print(np.sqrt(np.sum(pos**2)), end='\r')
+            print(np.sqrt(np.sum(pos**2)), end="\r")
 
         return pos
 
 
-def get_B(pos, g, h, N, equation_type='analytic',
-          normalize=True, docurve=True):
+def get_B(pos, g, h, N, equation_type="analytic", normalize=True, docurve=True):
     """Get the magnetic field unit vector."""
     r_a = np.sqrt(np.sum(pos**2))
     theta = np.arccos(pos[2] / r_a)
@@ -266,8 +275,7 @@ def get_B(pos, g, h, N, equation_type='analytic',
     #     # calc_internal_field(r_a, theta, phi, g, h, N)
 
     # B_int = np.array([Bx_int[0], By_int[0], Bz_int[0]])
-    B_cs = calc_currentsheet_field(
-        pos, equation_type=equation_type, docurve=docurve)
+    B_cs = calc_currentsheet_field(pos, equation_type=equation_type, docurve=docurve)
     B = B_int + B_cs
 
     if normalize:
@@ -277,8 +285,8 @@ def get_B(pos, g, h, N, equation_type='analytic',
 
 
 def trace_field_dormandprince(
-        start, gCoeff, hCoeff, N, h=0.2, Atol=1.0,
-        equation_type='analytic', docurve=True):
+    start, gCoeff, hCoeff, N, h=0.2, Atol=1.0, equation_type="analytic", docurve=True
+):
 
     streamline = np.zeros((10000, 3)) * np.nan
     streamline[0, :] = start * 1.0
@@ -286,22 +294,40 @@ def trace_field_dormandprince(
     pos = start * 1.0
 
     # Define the Dormand-Prince coefficients
-    c = np.array([0., 1./5, 3./10, 4./5, 8./9, 1., 1.])
-    a = np.array([
+    c = np.array([0.0, 1.0 / 5, 3.0 / 10, 4.0 / 5, 8.0 / 9, 1.0, 1.0])
+    a = np.array(
+        [
             [0, 0, 0, 0, 0, 0],
-            [1./5, 0, 0, 0, 0, 0],
-            [3./40, 9./40, 0, 0, 0, 0],
-            [44./45, -56./15, 32./9, 0, 0, 0],
-            [19372./6561, -25360./2187, 64448./6561, -212./729, 0., 0.],
-            [9017./3168, -355./33, 46732./5247, 49./176, -5103./18656, 0.],
-            [35./384, 0, 500./1113, 125./192, -2187./6784, 11./84]])
+            [1.0 / 5, 0, 0, 0, 0, 0],
+            [3.0 / 40, 9.0 / 40, 0, 0, 0, 0],
+            [44.0 / 45, -56.0 / 15, 32.0 / 9, 0, 0, 0],
+            [19372.0 / 6561, -25360.0 / 2187, 64448.0 / 6561, -212.0 / 729, 0.0, 0.0],
+            [
+                9017.0 / 3168,
+                -355.0 / 33,
+                46732.0 / 5247,
+                49.0 / 176,
+                -5103.0 / 18656,
+                0.0,
+            ],
+            [35.0 / 384, 0, 500.0 / 1113, 125.0 / 192, -2187.0 / 6784, 11.0 / 84],
+        ]
+    )
 
-    b = [35./384, 0, 500./1113, 125./192, -2187./6784, 11./84, 0]
-    bcap = [5179./57600, 0, 7571./16695, 393./640, -92097./339200, 187./2100, 1./40]
+    b = [35.0 / 384, 0, 500.0 / 1113, 125.0 / 192, -2187.0 / 6784, 11.0 / 84, 0]
+    bcap = [
+        5179.0 / 57600,
+        0,
+        7571.0 / 16695,
+        393.0 / 640,
+        -92097.0 / 339200,
+        187.0 / 2100,
+        1.0 / 40,
+    ]
 
     k = np.zeros((7, 3))
 
-    Rtol = 0.
+    Rtol = 0.0
 
     facmax = 4
     facmin = 0.125
@@ -312,13 +338,19 @@ def trace_field_dormandprince(
         pos_cap = pos * 1.0
         pos_new = pos * 1.0
 
-        err = 2.
+        err = 2.0
 
         while err > 1.0:
 
             k[0, :] = get_B(
-                pos_new, gCoeff, hCoeff, N,
-                equation_type=equation_type, normalize=True, docurve=docurve)
+                pos_new,
+                gCoeff,
+                hCoeff,
+                N,
+                equation_type=equation_type,
+                normalize=True,
+                docurve=docurve,
+            )
             ds = 0
 
             for i in range(1, 7):
@@ -328,8 +360,14 @@ def trace_field_dormandprince(
                     posStep += h * a[i, j] * k[i - 1, :]
 
                 k[i, :] = get_B(
-                    posStep, gCoeff, hCoeff, N,
-                    equation_type=equation_type, normalize=True, docurve=docurve)
+                    posStep,
+                    gCoeff,
+                    hCoeff,
+                    N,
+                    equation_type=equation_type,
+                    normalize=True,
+                    docurve=docurve,
+                )
 
                 pos_new += h * b[i] * k[i, :]
                 pos_cap += h * bcap[i] * k[i, :]
@@ -337,24 +375,24 @@ def trace_field_dormandprince(
                 ds += h * b[i] * k[i, :]
 
             sc = Atol + np.maximum(np.abs(pos), np.abs(pos_new)) * Rtol
-            err = np.sqrt(1 / 3 * np.sum(((pos - pos_new) / sc)**2))
+            err = np.sqrt(1 / 3 * np.sum(((pos - pos_new) / sc) ** 2))
 
-            h = h * np.minimum(facmax, np.maximum(facmin, 0.8 * (1 / err)**(1./4)))
+            h = h * np.minimum(facmax, np.maximum(facmin, 0.8 * (1 / err) ** (1.0 / 4)))
             # print(err, end='\r')
-            #print(np.sqrt(np.sum(pos**2)), h, err, end='\r')
+            # print(np.sqrt(np.sum(pos**2)), h, err, end='\r')
 
         pos = pos_new * 1.0
         streamline[count, :] = pos * 1.0
         count += 1
         # print(np.sqrt(np.sum(pos**2)), h, end='\r')
 
-    return streamline # [~np.all(streamline == 0, axis=1)]
+    return streamline  # [~np.all(streamline == 0, axis=1)]
 
 
 class TraceMShell:
 
-    G_COEFF = np.array([[0., 0.], [410993.4, 0.]])
-    H_COEFF = np.array([[0., 0.], [0., 0.]])
+    G_COEFF = np.array([[0.0, 0.0], [410993.4, 0.0]])
+    H_COEFF = np.array([[0.0, 0.0], [0.0, 0.0]])
     N_COEFF = 1
 
     def __init__(self, M):
@@ -362,11 +400,10 @@ class TraceMShell:
         Class to help trace a field line at a certain M-shell using a dipole +
         current sheet approximation.
         """
-        self.pos0 = np.array([M, 0., 0.])
+        self.pos0 = np.array([M, 0.0, 0.0])
         self.get_fieldline()
         self.calc_B0()
         self.calc_dBds()
-
 
     def _trace_field_to_planet(self, h=0.0002, Atol=0.01):
         """
@@ -378,27 +415,52 @@ class TraceMShell:
         s = np.zeros(10000) * np.nan
 
         streamline[0, :] = start * 1.0
-        s[0] = 0.
+        s[0] = 0.0
 
         pos = start * 1.0
 
         # Define the Dormand-Prince coefficients
-        c = np.array([0., 1./5, 3./10, 4./5, 8./9, 1., 1.])
-        a = np.array([
-            [0, 0, 0, 0, 0, 0],
-            [1./5, 0, 0, 0, 0, 0],
-            [3./40, 9./40, 0, 0, 0, 0],
-            [44./45, -56./15, 32./9, 0, 0, 0],
-            [19372./6561, -25360./2187, 64448./6561, -212./729, 0., 0.],
-            [9017./3168, -355./33, 46732./5247, 49./176, -5103./18656, 0.],
-            [35./384, 0, 500./1113, 125./192, -2187./6784, 11./84]])
+        c = np.array([0.0, 1.0 / 5, 3.0 / 10, 4.0 / 5, 8.0 / 9, 1.0, 1.0])
+        a = np.array(
+            [
+                [0, 0, 0, 0, 0, 0],
+                [1.0 / 5, 0, 0, 0, 0, 0],
+                [3.0 / 40, 9.0 / 40, 0, 0, 0, 0],
+                [44.0 / 45, -56.0 / 15, 32.0 / 9, 0, 0, 0],
+                [
+                    19372.0 / 6561,
+                    -25360.0 / 2187,
+                    64448.0 / 6561,
+                    -212.0 / 729,
+                    0.0,
+                    0.0,
+                ],
+                [
+                    9017.0 / 3168,
+                    -355.0 / 33,
+                    46732.0 / 5247,
+                    49.0 / 176,
+                    -5103.0 / 18656,
+                    0.0,
+                ],
+                [35.0 / 384, 0, 500.0 / 1113, 125.0 / 192, -2187.0 / 6784, 11.0 / 84],
+            ]
+        )
 
-        b = [35./384, 0, 500./1113, 125./192, -2187./6784, 11./84, 0]
-        bcap = [5179./57600, 0, 7571./16695, 393./640, -92097./339200, 187./2100, 1./40]
+        b = [35.0 / 384, 0, 500.0 / 1113, 125.0 / 192, -2187.0 / 6784, 11.0 / 84, 0]
+        bcap = [
+            5179.0 / 57600,
+            0,
+            7571.0 / 16695,
+            393.0 / 640,
+            -92097.0 / 339200,
+            187.0 / 2100,
+            1.0 / 40,
+        ]
 
         k = np.zeros((7, 3))
 
-        Rtol = 0.
+        Rtol = 0.0
 
         facmax = 4
         facmin = 0.125
@@ -410,12 +472,18 @@ class TraceMShell:
             pos_cap = pos * 1.0
             pos_new = pos * 1.0
 
-            err = 2.
+            err = 2.0
             while err > 1.0:
 
                 k[0, :] = field.get_B(
-                    pos_new, self.G_COEFF, self.H_COEFF, self.N_COEFF,
-                    equation_type='analytic', normalize=True, docurve=False)
+                    pos_new,
+                    self.G_COEFF,
+                    self.H_COEFF,
+                    self.N_COEFF,
+                    equation_type="analytic",
+                    normalize=True,
+                    docurve=False,
+                )
 
                 ds = 0
 
@@ -426,8 +494,14 @@ class TraceMShell:
                         posStep += h * a[i, j] * k[i - 1, :]
 
                     k[i, :] = field.get_B(
-                        posStep, self.G_COEFF, self.H_COEFF, self.N_COEFF,
-                        equation_type='analytic', normalize=True, docurve=False)
+                        posStep,
+                        self.G_COEFF,
+                        self.H_COEFF,
+                        self.N_COEFF,
+                        equation_type="analytic",
+                        normalize=True,
+                        docurve=False,
+                    )
 
                     pos_new += h * b[i] * k[i, :]
                     pos_cap += h * bcap[i] * k[i, :]
@@ -435,11 +509,13 @@ class TraceMShell:
                     # ds += np.sqrt(np.sum((h * b[i] * k[i, :])**2))
 
                 sc = Atol + np.maximum(np.abs(pos), np.abs(pos_new)) * Rtol
-                err = np.sqrt(1 / 3 * np.sum(((pos - pos_new) / sc)**2))
+                err = np.sqrt(1 / 3 * np.sum(((pos - pos_new) / sc) ** 2))
 
-                h = h * np.minimum(facmax, np.maximum(facmin, 0.8 * (1 / err)**(1./4)))
+                h = h * np.minimum(
+                    facmax, np.maximum(facmin, 0.8 * (1 / err) ** (1.0 / 4))
+                )
 
-            ds = np.sqrt(np.sum((pos_new - pos)**2))
+            ds = np.sqrt(np.sum((pos_new - pos) ** 2))
             pos = pos_new * 1.0
 
             streamline[count, :] = pos * 1.0
@@ -449,7 +525,6 @@ class TraceMShell:
 
         return streamline, s
 
-
     def get_fieldline(self):
         """
         Trace in both directions to the planet and get the coordinates of
@@ -458,9 +533,9 @@ class TraceMShell:
         traceS, sS = self._trace_field_to_planet(h=0.0002)
         traceN, sN = self._trace_field_to_planet(h=-0.0002)
 
-        fieldline = np.concatenate([
-            np.flip(truncate_nan_rows(traceN), axis=0),
-            truncate_nan_rows(traceS)[1:]])
+        fieldline = np.concatenate(
+            [np.flip(truncate_nan_rows(traceN), axis=0), truncate_nan_rows(traceS)[1:]]
+        )
 
         sN = np.flip(sN[~np.isnan(sN)])
         sS = sS[~np.isnan(sS)]
@@ -471,41 +546,51 @@ class TraceMShell:
         s = np.concatenate([sN, sS])
 
         self.trace = pd.DataFrame(
-            data = {
-                'x': fieldline[:, 0],
-                'y': fieldline[:, 1],
-                'z': fieldline[:, 2],
-                's': s
+            data={
+                "x": fieldline[:, 0],
+                "y": fieldline[:, 1],
+                "z": fieldline[:, 2],
+                "s": s,
             }
         )
 
-        self.trace['B'] = self.trace.apply(
-            lambda x: np.sqrt(np.sum(field.get_B(
-                np.array([x['x'], x['y'], x['z']]),
-                self.G_COEFF, self.H_COEFF, 1, normalize=False, docurve=False)**2)),
-            axis=1)
-
+        self.trace["B"] = self.trace.apply(
+            lambda x: np.sqrt(
+                np.sum(
+                    field.get_B(
+                        np.array([x["x"], x["y"], x["z"]]),
+                        self.G_COEFF,
+                        self.H_COEFF,
+                        1,
+                        normalize=False,
+                        docurve=False,
+                    )
+                    ** 2
+                )
+            ),
+            axis=1,
+        )
 
         # Find location of minimum B
-        i = np.argmin(self.trace['B'])
+        i = np.argmin(self.trace["B"])
 
         # Shift s so that s=0 is the magnetic equator
-        self.trace.loc[:, 's'] = (self.trace.loc[:, 's'] - self.trace.loc[i, 's'])
+        self.trace.loc[:, "s"] = self.trace.loc[:, "s"] - self.trace.loc[i, "s"]
 
         # Find s0
         i0 = np.argmin(
-            (self.trace['x'] - self.pos0[0])**2 + \
-            (self.trace['y'] - self.pos0[1])**2 + \
-            (self.trace['z'] - self.pos0[2])**2)
+            (self.trace["x"] - self.pos0[0]) ** 2
+            + (self.trace["y"] - self.pos0[1]) ** 2
+            + (self.trace["z"] - self.pos0[2]) ** 2
+        )
 
-        self.s0 = self.trace.loc[i0, 's']
+        self.s0 = self.trace.loc[i0, "s"]
 
         # Find B0
-        B0 = self.trace.loc[i0, 'B']
+        B0 = self.trace.loc[i0, "B"]
 
         # Sort dataframe so s is increasing
-        self.trace.sort_values('s', axis=0, inplace=True)
-
+        self.trace.sort_values("s", axis=0, inplace=True)
 
     def calc_B0(self):
         """
@@ -523,18 +608,15 @@ class TraceMShell:
 
         self.B0 = np.sqrt(np.sum(magVector**2))
 
-
     def calc_dBds(self):
 
-        self.trace['dBds'] = np.gradient(self.trace['B'], self.trace['s'])
-        self.calc_dBds = CubicSpline(self.trace['s'], self.trace['dBds'])
-
+        self.trace["dBds"] = np.gradient(self.trace["B"], self.trace["s"])
+        self.calc_dBds = CubicSpline(self.trace["s"], self.trace["dBds"])
 
 
 def truncate_nan_rows(a):
     mask = np.all(np.isnan(a) | np.equal(a, 0), axis=1)
     return a[~mask]
-
 
 
 def trace_particle(E, m, alpha0, pos0, tmax):
@@ -550,21 +632,34 @@ def trace_particle(E, m, alpha0, pos0, tmax):
     # Calculate mu that remains constant over the motion
 
     p = calc_p_from_kineticenergy(E / e, m=m)
-    mu = p**2 / (2 * m) * np.sin(alpha0)**2 / trace.B0 / 1e-9
-
+    mu = p**2 / (2 * m) * np.sin(alpha0) ** 2 / trace.B0 / 1e-9
 
     # solve the initial value problem
     def func(_, F, mu, m):
-        return np.array([
-            -mu / (m / np.sqrt(1 - (v0 / speed_of_light)**2))
-                * trace.calc_dBds(F[1] / R_JUPITER) * 1e-9 / R_JUPITER,
-            F[0]])
+        return np.array(
+            [
+                -mu
+                / (m / np.sqrt(1 - (v0 / speed_of_light) ** 2))
+                * trace.calc_dBds(F[1] / R_JUPITER)
+                * 1e-9
+                / R_JUPITER,
+                F[0],
+            ]
+        )
 
     y0 = np.array([v0 * np.cos(alpha0), trace.s0 * R_JUPITER])
 
-    return solve_ivp(
-        func, (0, tmax), y0, args=(mu, m),
-        atol=(0.1, 0.0001 * R_JUPITER), dense_output=True), trace
+    return (
+        solve_ivp(
+            func,
+            (0, tmax),
+            y0,
+            args=(mu, m),
+            atol=(0.1, 0.0001 * R_JUPITER),
+            dense_output=True,
+        ),
+        trace,
+    )
 
 
 def calc_bounce_period(E0, alpha0, trace=None, mShell=None, m=m_e):
@@ -596,43 +691,44 @@ def calc_bounce_period(E0, alpha0, trace=None, mShell=None, m=m_e):
     else:
         raise Exception("Can only pass `trace` or `mShell` but not both.")
 
+    trace.trace["u"] = np.arccos(
+        np.sqrt(1 - np.sin(alpha0) ** 2 * trace.trace["B"] / trace.B0)
+    )
 
-    trace.trace['u'] = np.arccos(
-        np.sqrt(1 - np.sin(alpha0)**2 * trace.trace['B'] / trace.B0))
+    traceFiltered = trace.trace[(~np.isnan(trace.trace["u"])) & (trace.trace["s"] > 0)]
 
-    traceFiltered = trace.trace[
-        (~np.isnan(trace.trace['u'])) & (trace.trace['s'] > 0)]
-
-    calc_dBds_u = CubicSpline(
-        traceFiltered['u'], traceFiltered['dBds'])
+    calc_dBds_u = CubicSpline(traceFiltered["u"], traceFiltered["dBds"])
 
     def eval_func(u):
         return 2 * mpmath.sin(u) / calc_dBds_u(u)
 
-    return 4\
-        * trace.B0\
-        / np.sin(alpha0)**2\
-        / (v0 / 71492e3)\
-        * mpmath.quad(eval_func, [alpha0, np.pi / 2], method='tanh-sinh')
+    return (
+        4
+        * trace.B0
+        / np.sin(alpha0) ** 2
+        / (v0 / 71492e3)
+        * mpmath.quad(eval_func, [alpha0, np.pi / 2], method="tanh-sinh")
+    )
 
 
 def get_M_shell(x: float, y: float, z: float) -> tuple[float, float, float]:
-        """Get the M shell location of Juno using Ray-Tracing."""
-        JupiterMag.Con2020.Config(equation_type='analytic')
-        T_analytic = JupiterMag.TraceField(x, y, z,
-                                IntModel='jrm33', ExtModel='Con2020')
+    """Get the M shell location of Juno using Ray-Tracing."""
+    JupiterMag.Con2020.Config(equation_type="analytic")
+    T_analytic = JupiterMag.TraceField(x, y, z, IntModel="jrm33", ExtModel="Con2020")
 
-        trace = T_analytic.TraceDict()
-        Bmag = np.sqrt(trace['Bx'][0]**2 + trace['By'][0]**2 + trace['Bz'][0]**2)
-        rad = np.sqrt(trace['x'][0]**2 + trace['y'][0]**2 + trace['z'][0]**2)
-        lat = np.arctan2(trace['z'][0]**2, np.sqrt(trace['x'][0]**2 + trace['y'][0]**2))
-        lon = np.arctan2(trace['y'][0], trace['x'][0])
+    trace = T_analytic.TraceDict()
+    Bmag = np.sqrt(trace["Bx"][0] ** 2 + trace["By"][0] ** 2 + trace["Bz"][0] ** 2)
+    rad = np.sqrt(trace["x"][0] ** 2 + trace["y"][0] ** 2 + trace["z"][0] ** 2)
+    lat = np.arctan2(
+        trace["z"][0] ** 2, np.sqrt(trace["x"][0] ** 2 + trace["y"][0] ** 2)
+    )
+    lon = np.arctan2(trace["y"][0], trace["x"][0])
 
-        M = rad[np.argmin(Bmag)]
-        lat = lat[np.argmin(Bmag)]
-        lon = lon[np.argmin(Bmag)]
+    M = rad[np.argmin(Bmag)]
+    lat = lat[np.argmin(Bmag)]
+    lon = lon[np.argmin(Bmag)]
 
-        return M, lat * 180 / np.pi, lon * 180 / np.pi
+    return M, lat * 180 / np.pi, lon * 180 / np.pi
 
 
 def get_M_shell_time(t):
@@ -643,21 +739,21 @@ def get_M_shell_time(t):
 
 
 def get_M_shell_times(times):
-    position, _ = get_juno_position(times, coordsystem='IAU_JUPITER')
+    position, _ = get_juno_position(times, coordsystem="IAU_JUPITER")
     resultMshells = np.zeros(position.shape[0])
     for i, pos in enumerate(position):
         resultMshells[i], _, _ = get_M_shell(pos[0], pos[1], pos[2])
     return resultMshells
 
 
-def calc_delta_alfven_juno(times, satellite='IO'):
+def calc_delta_alfven_juno(times, satellite="IO"):
     """
     Use the magnetic field model to calculate the longitudinal separation
     between Juno's mapped location on Io's orbital plane and Io.
     This is incorrect as it does not account for the propagation time between
     Juno and Io.
     """
-    posJuno, _ = spice.get_juno_position(times, coordsystem='IAU_JUPITER')
+    posJuno, _ = spice.get_juno_position(times, coordsystem="IAU_JUPITER")
 
     deltaAlfven = np.zeros(len(times))
     print(posJuno.shape)
@@ -666,22 +762,21 @@ def calc_delta_alfven_juno(times, satellite='IO'):
         for i, pos in enumerate(posJuno):
             print(pos)
             # Trace field in IAU_JUPITER
-            JupiterMag.Con2020.Config(equation_type='analytic')
-            T_analytic = JupiterMag.TraceField(pos[0], pos[1], pos[2],
-                                    IntModel='jrm33', ExtModel='Con2020')
+            JupiterMag.Con2020.Config(equation_type="analytic")
+            T_analytic = JupiterMag.TraceField(
+                pos[0], pos[1], pos[2], IntModel="jrm33", ExtModel="Con2020"
+            )
             trace = T_analytic.TraceDict()
-            fieldtrace = np.array(
-                [trace['x'][0], trace['y'][0], trace['z'][0]])
+            fieldtrace = np.array([trace["x"][0], trace["y"][0], trace["z"][0]])
 
-            print('Fieldtrace shape - ', fieldtrace.shape)
+            print("Fieldtrace shape - ", fieldtrace.shape)
 
             # Find rotation matrix to PHI-O system
-            print(times[i].strftime('%Y-%m-%dT%H:%M:%S'))
-            time = spice.str2et(times[i].strftime('%Y-%m-%dT%H:%M:%S'))
+            print(times[i].strftime("%Y-%m-%dT%H:%M:%S"))
+            time = spice.str2et(times[i].strftime("%Y-%m-%dT%H:%M:%S"))
 
-            R = spice.pxform(
-                'IAU_JUPITER', 'JUNO_{:s}_PHI_O'.format(satellite), time)
-            print('R shape - ', R.shape)
+            R = spice.pxform("IAU_JUPITER", "JUNO_{:s}_PHI_O".format(satellite), time)
+            print("R shape - ", R.shape)
 
             # Convert fieldline position array to PHI-O
             fieldtracePhiO = np.matmul(R, fieldtrace).T
@@ -689,23 +784,26 @@ def calc_delta_alfven_juno(times, satellite='IO'):
             izero = np.where(np.diff(np.signbit(fieldtracePhiO[:, 2])))[0]
 
             rEqJuno = 0.5 * (fieldtrace[:, izero] + fieldtrace[:, izero + 1])
-            posSat, _ = spice.spkpos(
-                satellite, time, 'IAU_JUPITER', 'NONE', 'JUPITER')
+            posSat, _ = spice.spkpos(satellite, time, "IAU_JUPITER", "NONE", "JUPITER")
 
             posSat = np.asarray(posSat) / 71492
 
+            print("posSat", posSat)
+            print("rEqJuno", rEqJuno)
 
-            print('posSat', posSat)
-            print('rEqJuno', rEqJuno)
+            deltaAlfven[i] = (
+                np.arccos(
+                    np.dot(rEqJuno.T, posSat)
+                    / np.sqrt(np.sum(rEqJuno**2))
+                    / np.sqrt(np.sum(posSat**2))
+                )
+                * 180
+                / np.pi
+            )
 
-            deltaAlfven[i] = np.arccos(np.dot(rEqJuno.T, posSat)\
-                / np.sqrt(np.sum(rEqJuno**2))\
-                / np.sqrt(np.sum(posSat**2))) * 180 / np.pi
+            xJunoPhiO = 0.5 * (fieldtracePhiO[izero, 0] + fieldtracePhiO[izero + 1, 0])
 
-            xJunoPhiO = 0.5 * (
-                fieldtracePhiO[izero, 0] + fieldtracePhiO[izero + 1, 0])
-
-            if xJunoPhiO < 0: # Wake
+            if xJunoPhiO < 0:  # Wake
                 deltaAlfven[i] = 180 - deltaAlfven[i]
 
     return deltaAlfven

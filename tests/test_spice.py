@@ -1,10 +1,9 @@
 
-import numpy as np
 import datetime as dt
 
-from JunoPy.spice import withspiceloaded, get_juno_position
+from junopy import spice
+from junopy import config
 
-@withspiceloaded()
 def test_spice():
     """
     """
@@ -14,5 +13,18 @@ def test_spice():
         dt.datetime(2017, 12, 1),
         dt.datetime(2018, 12, 1),
     ]
-    pos, _ = get_juno_position(times, coordsystem='JUNO_JSS')
+    pos, _ = spice.get_juno_position(times, coordsystem='JUNO_JSS')
     print(pos)
+
+
+# print(config.ConfigVars.get("SPICE_DIR"))
+# kernels = spice.identify_juno_kernels()
+# spice._remake_meta_kernel_file(kernels)
+
+# times = [
+#         dt.datetime(2016, 12, 1),
+#         dt.datetime(2017, 12, 1),
+#         dt.datetime(2018, 12, 1),
+#     ]
+# pos, _ = spice.get_juno_position(times, coordsystem='JUNO_JSS')
+# print(pos)

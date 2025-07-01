@@ -34,8 +34,9 @@ def cxcs_Hplus_O(energy: float) -> float:
     a4 = 4.73
     a5 = -0.862
     a6 = 0.0306
-    return (a1 - a2 * np.log(energy))**2 * (1 - np.exp(-a3 / energy))**2 \
-         + (a4 - a5 * np.log(energy)) * (1 - np.exp(-a6 / energy))**2
+    return (a1 - a2 * np.log(energy)) ** 2 * (1 - np.exp(-a3 / energy)) ** 2 + (
+        a4 - a5 * np.log(energy)
+    ) * (1 - np.exp(-a6 / energy)) ** 2
 
 
 def cxcs_Oplus_O(energy: float) -> float:
@@ -52,7 +53,7 @@ def cxcs_Oplus_O(energy: float) -> float:
     a1 = 4.07
     a2 = 0.269
     a3 = 4125
-    return (a1 - a2 * np.log(energy))**2 * (1 - np.exp(-a3 / energy))**0.8
+    return (a1 - a2 * np.log(energy)) ** 2 * (1 - np.exp(-a3 / energy)) ** 0.8
 
 
 def cxcs_Hplus_H2(energy: float) -> float:
@@ -76,18 +77,18 @@ def cxcs_Hplus_H2(energy: float) -> float:
     a8 = 9.34
     a9 = 2.997
 
-    rydberg = 1.361e-2           # keV
-    threshold_energy = 2.5e-3    # keV
+    rydberg = 1.361e-2  # keV
+    threshold_energy = 2.5e-3  # keV
 
     e1 = energy - threshold_energy
 
-    f1 = a1 * (e1 / rydberg)**a2
-    f2 = f1 / (1 + (e1 / a3)**(a2 + a4))
+    f1 = a1 * (e1 / rydberg) ** a2
+    f2 = f1 / (1 + (e1 / a3) ** (a2 + a4))
 
-    f1_2 = a5 * (e1 / rydberg)**a2
-    f3_2 = f1_2 / (1 + (e1 / a6)**(a2 + a7) + (e1 / a8)**(a2 + a9))
+    f1_2 = a5 * (e1 / rydberg) ** a2
+    f3_2 = f1_2 / (1 + (e1 / a6) ** (a2 + a7) + (e1 / a8) ** (a2 + a9))
 
-    return (f2 + f3_2)
+    return f2 + f3_2
 
 
 def cxcs_Hplus_Oplus(energy: float) -> float:

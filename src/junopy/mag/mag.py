@@ -21,6 +21,7 @@ import pandas as pd
 import copy
 import spiceypy
 import logging
+from functools import reduce
 
 from typing import Optional, Any
 from matplotlib import axes
@@ -275,7 +276,14 @@ class MagData(object):
                 self.df["X"],
                 self.df["Y"],
                 self.df["Z"],
-            ) = _t[0], _t[1], _t[2], _t[3], _t[4], _t[5]
+            ) = (
+                _t[0],
+                _t[1],
+                _t[2],
+                _t[3],
+                _t[4],
+                _t[5],
+            )
 
         except KeyError:
             print(_t)
@@ -365,20 +373,28 @@ def get_mag_data(
     start: dt.datetime,
     stop: dt.datetime,
     do_download: bool = True,
-    coordsystem: Optional[str] = None,
+    do_parallel: bool = False,
     sid: str = "SS 1 SECOND",
-) -> MagData:
+) -> list[str]:
     """
-    Get magnetometer data between certain start and stop times.
-    Downloads files if they do not exist.
+    Downloads magnetometer data between certain start and stop times if the files
+    are not already present in the junopy root directory.  Regardless of whether
+    the files are downloaded or not, this function will convert the files to
+    HDF5 format if they are not already in that format.  This method returns a list
+    of the relevant HDF5 files that were downloaded or converted or were already
+    present.
 
     Args:
         start (dt.datetime): Get data starting from this date-time.
         stop (dt.datetime): Get data until this date-time.
         do_download (bool): Whether to download missing files.
-        coord_system (str | None): Coordinate system for resulting data.
+        do_parallel (bool): Whether to download files in parallel.
         sid (str): SID corresponding to the data file, see Usage>Magnetometer
             for different options.
+
+    Returns:
+        list[str]: List of relevant HDF5 files that were downloaded or converted
+            or were already present in the junopy root directory.
     """
     magindex = index.IndexFile(dataset="mag")
 
@@ -399,6 +415,39 @@ def get_mag_data(
             logging.error("Magnetometer file missing. Use do_download=True")
 
     files = [str(x.with_suffix(".hdf5")) for x in files]
+    return files
+
+
+def load_mag_data(
+    start: dt.datetime,
+    stop: dt.datetime,
+    do_download: bool = True,
+    do_parallel: bool = False,
+    coordsystem: Optional[str] = None,
+    sid: str = "SS 1 SECOND",
+) -> MagData:
+    """
+    Loads the magnetometer data into memory as a single `MagData` instance.
+    WARNING: This method will merge all the files that are within the start
+    and stop times, so it is not recommended to use this method if you need to
+    work with a large number of files or if the time range is too large.
+
+    Args:
+        start (dt.datetime): Load data starting from this date-time.
+        stop (dt.datetime): Load data until this date-time.
+        do_download (bool): Whether to download missing files.
+        do_parallel (bool): Whether to download files in parallel.
+        coord_system (str | None): Coordinate system for resulting data.
+        sid (str): SID corresponding to the data file, see Usage>Magnetometer
+            for different options.
+    """
+    files = get_mag_data(
+        start,
+        stop,
+        do_download=do_download,
+        do_parallel=do_parallel,
+        sid=sid,
+    )
 
     magdatalist = []
 
@@ -408,8 +457,6 @@ def get_mag_data(
             MagData(filename=f, start=start, stop=stop, coordsystem=coordsystem)
         )
 
-    merged = magdatalist[0]
-    for magdata in magdatalist[1:]:
-        merged = merge_magdata(merged, magdata)
+    merged = reduce(merge_magdata, magdatalist)
 
     return merged

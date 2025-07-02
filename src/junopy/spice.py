@@ -78,6 +78,7 @@ class withspiceloaded(ContextDecorator):
         metafile = spice_dir / "JunoMetaKernel.txt"
         spiceypy.unload(str(metafile))
 
+
 def _split_string_for_spiceypy(input_string: str) -> str:
     """
     Split a string into a format that is compatible with SPICEypy.
@@ -95,19 +96,17 @@ def _split_string_for_spiceypy(input_string: str) -> str:
 
     output_string = ""
     i = 0
-    segment = input_string[:string_len]   
+    segment = input_string[:string_len]
     while len(segment) == string_len:
         output_string += "\n    '" + segment + "+',"
         i += 1
         segment = input_string[i * string_len : (i + 1) * string_len]
 
     output_string += "\n    '" + segment + "'"
-    
-        
+
     output_string += "\n,\n"
 
     return output_string
-
 
 
 def identify_juno_kernels() -> list[str]:

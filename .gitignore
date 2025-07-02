@@ -135,3 +135,5 @@ project*
 *.DS_Store
 *Juno-footprints
 .zed
+.vscode
+.junodata

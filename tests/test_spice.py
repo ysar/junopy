@@ -7,7 +7,6 @@ from junopy import config
 def test_spice():
     """
     """
-    
     times = [
         dt.datetime(2016, 12, 1),
         dt.datetime(2017, 12, 1),

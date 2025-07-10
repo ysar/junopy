@@ -62,6 +62,16 @@ class ConfigVars:
             raise
 
     @classmethod
+    def get_all(cls) -> dict[str, Path]:
+        """
+        Get a copy of all `junopy` configuration variables.
+
+        Returns:
+            A dictionary of all configuration variables
+        """
+        return cls.__config.copy()
+
+    @classmethod
     def set_root(cls, value: Path | str, create_dirs: bool = True) -> None:
         """
         Set the root directory and update all dependent paths.
@@ -102,11 +112,6 @@ class ConfigVars:
         # Log important directory changes
         for dir_type in ["DATA", "SPICE", "INDEX"]:
             logging.info(f"{dir_type} directory: {cls.get(f'{dir_type}_DIR')}")
-
-    @classmethod
-    def get_all(cls) -> Dict[str, Path]:
-        """Get a copy of the complete configuration dictionary."""
-        return cls.__config.copy()
 
 
 # Initialize the configuration

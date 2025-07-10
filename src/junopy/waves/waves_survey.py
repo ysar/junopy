@@ -1,5 +1,4 @@
 import numpy as np
-import copy
 import pandas as pd
 import datetime as dt
 import glob
@@ -10,16 +9,16 @@ from typing import Optional
 
 from junopy import config
 from junopy import index
-from junopy.mag import MagData
 
 
-class WavesData(object):
+class WavesSurveyData(object):
     def __init__(
         self,
         start: Optional[dt.datetime] = None,
         stop: Optional[dt.datetime] = None,
         filename: Optional[str] = None,
-        freq_limits: tuple[Optional[float], Optional[float]] = (None, None),
+        freq_low: Optional[float] = None,
+        freq_high: Optional[float] = None,
     ):
         """
         Class to parse data from the Waves instrument.
@@ -28,8 +27,8 @@ class WavesData(object):
             start (dt.datetime | None): Start time for observations.
             stop (dt.datetime | None): Stop time for observations.
             filename (str | None): Name of the data file to be read.
-            freq_limits (tuple[Optional(float), Optional(float)]): Limit analysis to these
-                frequencies in Hz. Default: (None, None)
+            freq_low (float | None): Lower frequency limit for analysis in Hz.
+            freq_high (float | None): Upper frequency limit for analysis in Hz.
         """
         if filename:
             self.filename = filename
@@ -40,11 +39,11 @@ class WavesData(object):
                 start.strftime("%Y-%m-%d %H:%M:%S") : stop.strftime("%Y-%m-%d %H:%M:%S")
             ].copy()
 
-        if freq_limits[0]:
-            self.channels = self.channels[self.channels["freq"] >= freq_limits[0]]
+        if freq_low:
+            self.channels = self.channels[self.channels["freq"] >= freq_low]
 
-        if freq_limits[1]:
-            self.channels = self.channels[self.channels["freq"] <= freq_limits[1]]
+        if freq_high:
+            self.channels = self.channels[self.channels["freq"] <= freq_high]
 
     def parse_waves_file(self):
         """
@@ -104,7 +103,7 @@ class WavesData(object):
         self.df.set_index(["time"], inplace=True)
         self.df.drop(inplace=True, columns=["SCET", "SCLK (sec)"])
 
-    def limit_freq(self, lower: float, upper: float):
+    def limit_freq(self, lower: float, upper: float) -> None:
         """
         Limit the frequency range of the data to the specified lower and upper bounds.
 
@@ -119,17 +118,14 @@ class WavesData(object):
     def plot(
         self,
         ax: mpl.Axes,
-        mag_data: MagData = None,
         freq_low: float = 5e1,
         freq_high: float = 20e3,
         vmin: float | None = None,
         vmax: float | None = None,
         use_log_scale: bool = True,
         cbar_label: str = "",
-        show_cutoff: bool = False,
-        plot_fce: bool = False,
         **kwargs,
-    ):
+    ) -> None:
         """
         Plot Waves-Survey Spectra  (Freq vs time).
 
@@ -200,9 +196,11 @@ class WavesData(object):
         return ax
 
 
-def get_waves_data(
-    start: dt.datetime, end: dt.datetime
-) -> tuple[Optional(WavesData), Optional(WavesData)]:
+def get_waves_data_for_date(
+    date: dt.datetime,
+    start: dt.datetime | None = None,
+    stop: dt.datetime | None = None,
+) -> tuple[WavesSurveyData | None, WavesSurveyData | None]:
     """
     Get the electric and magnetic field data from the Waves survey dataset.
 
@@ -211,49 +209,46 @@ def get_waves_data(
         stop (dt.datetime): Stop time for the observations.
 
     Returns:
-        electric_spectra, magnetic_spectra (tuple[Optional(WavesData),
-        Optional(WavesData)]):
-            Tuple where the first item is the electric field spectra (from all
-            antennae), and the second item is the magnetic field spectra.
-
+        electric_spectra (WavesSurveyData | None): The electric field spectra.
+        magnetic_spectra (WavesSurveyData | None): The magnetic field spectra.
     """
 
-    datafolder = config.ConfigVars.get("WAVES_SURVEY_DATA_DIR")
-    wavesfiles = glob.glob(datafolder + "/*{:s}*.CSV".format(start.strftime("%Y%j")))
+    data_folder = config.ConfigVars.get("WAVES_SURVEY_DATA_DIR")
+    waves_files = glob.glob(data_folder + "/*{:s}*.CSV".format(date.strftime("%Y%j")))
 
-    if len(wavesfiles) != 2:
-        wavesindex = index.IndexFile(dataset="waves-survey")
-        _ = wavesindex.get_files_between_dates(
-            start, end, do_download=True, sid="SURVEY"
+    if len(waves_files) != 2:
+        waves_index = index.IndexFile(dataset="waves-survey")
+        _ = waves_index.get_files_between_dates(
+            start, stop, do_download=True, sid="SURVEY"
         )
 
-        wavesfiles = glob.glob(
-            datafolder + "/*{:s}*.CSV".format(start.strftime("%Y%j"))
+        waves_files = glob.glob(
+            data_folder + "/*{:s}*.CSV".format(date.strftime("%Y%j"))
         )
 
         # assert(len(wavesfiles) == 2)
 
-    for wfile in wavesfiles:
+    for wfile in waves_files:
         print("Reading Waves file - {:s}".format(wfile))
         if "_E_" in wfile:
-            wavesdataE = WavesData(filename=wfile, start=start, end=end)
+            waves_psd_electric = WavesSurveyData(filename=wfile, start=start, stop=stop)
         else:
-            wavesdataB = WavesData(filename=wfile, start=start, end=end)
+            waves_psd_magnetic = WavesSurveyData(filename=wfile, start=start, stop=stop)
 
-    return wavesdataE, wavesdataB
+    return waves_psd_electric, waves_psd_magnetic
 
 
-def merge_wavesdata(w1: WavesData, w2: WavesData) -> WavesData:
-    """
-    Merge two instances of WavesData:
+# def merge_waves_survey_data(w1: WavesSurveyData, w2: WavesSurveyData) -> WavesSurveyData:
+#     """
+#     Merge two instances of WavesSurveyData:
 
-    Args:
-        w1 (WavesData): First instance
-        w2 (WavesData): Second instance
+#     Args:
+#         w1 (WavesSurveyData): First instance
+#         w2 (WavesSurveyData): Second instance
 
-    Returns:
-        WavesData: The merged dataset.
-    """
-    w3 = copy.copy(w1)
-    w3.df = pd.concat([w1.df, w2.df])
-    return w3
+#     Returns:
+#         WavesSurveyData: The merged dataset.
+#     """
+#     w3 = copy.copy(w1)
+#     w3.df = pd.concat([w1.df, w2.df])
+#     return w3

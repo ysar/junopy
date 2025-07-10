@@ -1,770 +1,785 @@
-# """
-# junopy - A Python API for the Juno spacecraft's particle and fields datasets.
-# Copyright (C) 2018  Yash Sarkango
-
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-# """
-# import os
-# import numpy as np
-# import pandas as pd
-# import datetime as dt
-# import glob
-
-# import matplotlib.colors as colors
-
-# from scipy.constants import m_e, m_p, e
-
-# from junopy.spice import get_juno_position
-
-
-# class JediData:
-#     """
-#     Class to read and do things with a single JEDI data file.
-
-#     :param str filename: Path to file to be read.
-#     :param datetime.datetime start: Starting time to slice data.
-#     :param datetime.datetime end: Ending time to slice data.
-#     :param str species: Plasma species (Options - 'O\+S', 'OXYGEN', 'SULFUR',
-#                         'ELECTRON')
-#     :param str dtbin: String describing the binning frequency (datetime code).
-#     :param list(float) efilter: List with upper and lower energy limits in keV.
-#     """
-#     nSSD = 6
-#     hasEQPAD = False
-#     hasValidData = False
-#     hasCXrate = False
-#     nChannels = -1
-#     hasEflux = False
-
-#     def __init__(self, **kwargs):
-
-#         self.filename = kwargs.pop('filename', None)
-#         if not self.filename:    # Creates empty JediData object
-#             return None
-
-#         self.species  = kwargs.pop('species', None)
-#         self.dtbin    = kwargs.pop('dtbin', dt.timedelta(seconds=60))
-#         self.efilter  = kwargs.pop('efilter', None)
-#         self.units    = kwargs.pop('units', 'FLUX')
-#         self.dbfile   = kwargs.pop('dbfile', None)
-#         self.nEbins   = kwargs.pop('nEbins', 20)
-#         self.nPAbins  = kwargs.pop('nPAbins', 18)
-#         self.start    = kwargs.pop('start', None)
-#         self.stop     = kwargs.pop('stop', None)
-#         self.nEQPAbins = kwargs.pop('nEQPAbins', 9)
-#         self.dosaveonly = kwargs.pop('dosaveonly', False)
-#         self.docalcCX   = kwargs.pop('docalcCX', False)
-#         self.cxtype    = kwargs.pop('cxtype', 'Hplus-O')
-#         self.calcEflux = kwargs.pop('calcEflux', False)
-#         self.paMin     = kwargs.pop('paMin', 0)
-#         self.paMax     = kwargs.pop('paMax', 180)
-
-#         if self.species == 'PROTON_TOFxPH':
-#             self.species = 'PROTON'
-
-#         if '.hdf' in self.filename:
-#             self.read_hdf_file()
-#         else:
-#             self.read_raw_csv_file()
-#             self.convert_to_hdf_file()
-
-#         if self.dosaveonly: return
-#         else:
-#             self._filter_metadata()
-
-#         if self.start and self.stop:
-#             self.df_raw = self.df_raw.loc[
-#                 self.start.strftime('%Y-%m-%d %H:%M:%S'):
-#                 self.stop.strftime('%Y-%m-%d %H:%M:%S')]
-
-#         self.mask_invalid_pa()
-
-#         if self.df_raw.empty:
-#             return
-#         else:
-#             self.hasValidData = True
-
-#         if self.units == 'PSD':
-#             self.calc_phase_space_density()
-
-#         self.create_energytime_df()
-#         self.create_pitchangle_df()
+"""
+junopy - A Python API for the Juno spacecraft's particle and fields datasets.
+Copyright (C) 2018  Yash Sarkango
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""
+import os
+import numpy as np
+import pandas as pd
+import datetime as dt
+import glob
+
+import matplotlib.colors as colors
+
+from scipy.constants import m_e, m_p, e
+
+from junopy.spice import get_juno_position
+
+
+class JediData:
+    """
+    Class to read and do things with a single JEDI data file.
+
+    :param str filename: Path to file to be read.
+    :param datetime.datetime start: Starting time to slice data.
+    :param datetime.datetime end: Ending time to slice data.
+    :param str species: Plasma species (Options - 'O\+S', 'OXYGEN', 'SULFUR',
+                        'ELECTRON')
+    :param str dtbin: String describing the binning frequency (datetime code).
+    :param list(float) efilter: List with upper and lower energy limits in keV.
+    """
+    num_ssd = 6
+    num_channels = -1
+    has_valid_data = False
+    has_energy_flux = False
+
+    def __init__(
+            self,
+            filename : str = None,
+            start : dt.datetime = None,
+            stop : dt.datetime = None,
+            species : str | None = None,
+            dt_bin: dt.timedelta = dt.timedelta(seconds=60),
+            units: str = 'FLUX',
+            num_energy_bins: int = 20,
+            num_pitchangle_bins: int = 18,
+            do_save_only: bool = False,
+            min_energy: float | None = None,
+            max_energy: float | None = None,
+            min_pitchangle: float = 0,
+            max_pitchangle: float = 180,
+    ):
+
+            **kwargs):
+
+        self.filename = kwargs.pop('filename', None)
+        if not self.filename:    # Creates empty JediData object
+            return None
+
+        self.species  = kwargs.pop('species', None)
+        self.dtbin    = kwargs.pop('dtbin', dt.timedelta(seconds=60))
+        self.efilter  = kwargs.pop('efilter', None)
+        self.units    = kwargs.pop('units', 'FLUX')
+        self.dbfile   = kwargs.pop('dbfile', None)
+        self.nEbins   = kwargs.pop('nEbins', 20)
+        self.nPAbins  = kwargs.pop('nPAbins', 18)
+        self.start    = kwargs.pop('start', None)
+        self.stop     = kwargs.pop('stop', None)
+        self.nEQPAbins = kwargs.pop('nEQPAbins', 9)
+        self.dosaveonly = kwargs.pop('dosaveonly', False)
+        self.docalcCX   = kwargs.pop('docalcCX', False)
+        self.cxtype    = kwargs.pop('cxtype', 'Hplus-O')
+        self.calcEflux = kwargs.pop('calcEflux', False)
+        self.paMin     = kwargs.pop('paMin', 0)
+        self.paMax     = kwargs.pop('paMax', 180)
+
+        if self.species == 'PROTON_TOFxPH':
+            self.species = 'PROTON'
+
+        if '.hdf' in self.filename:
+            self.read_hdf_file()
+        else:
+            self.read_raw_csv_file()
+            self.convert_to_hdf_file()
+
+        if self.dosaveonly: return
+        else:
+            self._filter_metadata()
+
+        if self.start and self.stop:
+            self.df_raw = self.df_raw.loc[
+                self.start.strftime('%Y-%m-%d %H:%M:%S'):
+                self.stop.strftime('%Y-%m-%d %H:%M:%S')]
 
-#         if self.dbfile:
-#             self.calc_equatorial_pad()
-#             self.create_pitchangle_df(eqpad=True)
+        self.mask_invalid_pa()
 
-#         if self.docalcCX:
-#             self.calc_cx_rate()
+        if self.df_raw.empty:
+            return
+        else:
+            self.has_valid_data = True
 
-#         if self.calcEflux:
-#             self.calc_energy_flux(
-#                 pa1=self.paMin, pa2=self.paMax)
+        if self.units == 'PSD':
+            self.calc_phase_space_density()
 
-#         self.resample()
+        self.create_energytime_df()
+        self.create_pitchangle_df()
 
+        if self.dbfile:
+            self.calc_equatorial_pad()
+            self.create_pitchangle_df(eqpad=True)
 
-#     def read_raw_csv_file(self):
-#         """
-#         Internal function to read the JEDI CSV file.
-#         :param str dtype: Type of JEDI file to be read
-#                           (Options='FLUX'(Default), 'COUNTS', 'CPS')
-#         """
-#         with open(self.filename, 'r') as f:
-#             channel = [x.strip() for x in f.readline().split(',')]
-#             Elow = [x.strip() for x in f.readline().split(',')]
-#             Ehigh = [x.strip() for x in f.readline().split(',')]
-#             Particle = [x.strip() for x in f.readline().split(',')]
+        if self.docalcCX:
+            self.calc_cx_rate()
 
-#         df = pd.DataFrame({
-#             'channel': channel[:len(Elow)],
-#             'Elow': Elow,
-#             'Ehigh': Ehigh,
-#             'Particle': Particle})
+        if self.calcEflux:
+            self.calc_energy_flux(
+                pa1=self.paMin, pa2=self.paMax)
 
-#         self.metadata = df
+        self.resample()
 
-#         self.df_raw = pd.read_csv(
-#             self.filename, names=channel, skiprows=5)
 
-#         self.df_raw['time'] = self.df_raw.apply(
-#                 lambda x: dt.datetime.strptime(
-#                     x['UTC'], '%Y-%m-%dT%H:%M:%S'), axis=1)
+    def read_raw_csv_file(self):
+        """
+        Internal function to read the JEDI CSV file.
+        :param str dtype: Type of JEDI file to be read
+                          (Options='FLUX'(Default), 'COUNTS', 'CPS')
+        """
+        with open(self.filename, 'r') as f:
+            channel = [x.strip() for x in f.readline().split(',')]
+            Elow = [x.strip() for x in f.readline().split(',')]
+            Ehigh = [x.strip() for x in f.readline().split(',')]
+            Particle = [x.strip() for x in f.readline().split(',')]
 
-#         self.df_raw.drop(labels='UTC', axis=1, inplace=True)
-#         self.df_raw.set_index(['time'], inplace=True)
-#         self.df_raw.sort_index(inplace=True)
+        df = pd.DataFrame({
+            'channel': channel[:len(Elow)],
+            'Elow': Elow,
+            'Ehigh': Ehigh,
+            'Particle': Particle})
 
+        self.metadata = df
 
-#     def _filter_metadata(self):
-#         """
-#         Impose additional filters on the metadata for later analysis.
-#         """
-#         df = self.metadata.copy()
-#         df['Particle'] = df['Particle'].str.upper()
+        self.df_raw = pd.read_csv(
+            self.filename, names=channel, skiprows=5)
 
-#         df = df[df['channel'].str.contains('FLUX')]
-#         df = df[~df['Particle'].str.contains('NONPARTICLE')]
-#         df = df[df['Particle'].str.contains(self.species)]
+        self.df_raw['time'] = self.df_raw.apply(
+                lambda x: dt.datetime.strptime(
+                    x['UTC'], '%Y-%m-%dT%H:%M:%S'), axis=1)
 
-#         df['Elow'] = df['Elow'].astype('float')
-#         df['Ehigh'] = df['Ehigh'].astype('float')
+        self.df_raw.drop(labels='UTC', axis=1, inplace=True)
+        self.df_raw.set_index(['time'], inplace=True)
+        self.df_raw.sort_index(inplace=True)
 
-#         df.reset_index(inplace=True, drop=True)
 
-#         # Filter unwanted energy channels
-#         if self.species == 'ELECTRON':
-#             for i in range(4):
-#                 filter = df['channel'][i][-7:]
-#                 df = df[~df['channel'].str.contains(filter)]
+    def _filter_metadata(self):
+        """
+        Impose additional filters on the metadata for later analysis.
+        """
+        df = self.metadata.copy()
+        df['Particle'] = df['Particle'].str.upper()
 
-#         if self.species == 'PROTON':
-#             for i in range(1):
-#                 filter = df['channel'][i][-7:]
-#                 df = df[~df['channel'].str.contains(filter)]
+        df = df[df['channel'].str.contains('FLUX')]
+        df = df[~df['Particle'].str.contains('NONPARTICLE')]
+        df = df[df['Particle'].str.contains(self.species)]
 
-#         df.reset_index(inplace=True, drop=True) # Have to reset index with every df change
+        df['Elow'] = df['Elow'].astype('float')
+        df['Ehigh'] = df['Ehigh'].astype('float')
 
-#         # A better way to filter energy channels so it doesnt
-#         # lead to unequal distribution across SSDs
-#         if self.efilter:
+        df.reset_index(inplace=True, drop=True)
 
-#             nChannels = int(len(df.index) / self.nSSD)
+        # Filter unwanted energy channels
+        if self.species == 'ELECTRON':
+            for i in range(4):
+                filter = df['channel'][i][-7:]
+                df = df[~df['channel'].str.contains(filter)]
 
-#             # Calculate mean energy across all SSDs
+        if self.species == 'PROTON':
+            for i in range(1):
+                filter = df['channel'][i][-7:]
+                df = df[~df['channel'].str.contains(filter)]
 
-#             Emean = np.zeros((6, nChannels))
+        df.reset_index(inplace=True, drop=True) # Have to reset index with every df change
 
-#             for i in range(self.nSSD):
+        # A better way to filter energy channels so it doesnt
+        # lead to unequal distribution across SSDs
+        if self.efilter:
 
-#                 dftmp = df[df['channel'].str[:2] == 'T{:d}'.format(i)]
-#                 Emean[i, :] = np.sqrt(dftmp['Elow'] * dftmp['Ehigh']).values
+            nChannels = int(len(df.index) / self.num_ssd)
 
-#             Emean = Emean.mean(axis=0)
+            # Calculate mean energy across all SSDs
 
-#             invalidChannels = np.asarray(
-#                 (Emean < self.efilter[0]) | (Emean >= self.efilter[1]))\
-#                 .nonzero()[0]
+            Emean = np.zeros((6, nChannels))
 
-#             for i in invalidChannels:
-#                 filter = df['channel'][i][-7:]
-#                 df = df[~df['channel'].str.contains(filter)]
+            for i in range(self.num_ssd):
 
-#         df.reset_index(inplace=True, drop=True)
+                dftmp = df[df['channel'].str[:2] == 'T{:d}'.format(i)]
+                Emean[i, :] = np.sqrt(dftmp['Elow'] * dftmp['Ehigh']).values
 
-#         # Assign ion mass and rename some strings for plotting.
-#         if self.species == 'O\+S' or self.species == 'HEAVY':
-#             self.species = 'O & S'
-#             m = 16 * m_p
+            Emean = Emean.mean(axis=0)
 
-#         elif self.species == 'OXYGEN':
-#             self.species = 'O'
-#             m = 16 * m_p
+            invalidChannels = np.asarray(
+                (Emean < self.efilter[0]) | (Emean >= self.efilter[1]))\
+                .nonzero()[0]
 
-#         elif self.species == 'SULFUR':
-#             self.species = 'S'
-#             m = 32 * m_p
+            for i in invalidChannels:
+                filter = df['channel'][i][-7:]
+                df = df[~df['channel'].str.contains(filter)]
 
-#         elif self.species == 'PROTON':
-#             self.species = 'H+'
-#             m = m_p * 1.0
+        df.reset_index(inplace=True, drop=True)
 
-#         else:
-#             self.species = 'e-'
-#             m = m_e * 1.0
+        # Assign ion mass and rename some strings for plotting.
+        if self.species == 'O\+S' or self.species == 'HEAVY':
+            self.species = 'O & S'
+            m = 16 * m_p
 
-#         # Conversion faction from J to PSD
-#         # f = m / v^2 j
-#         #   = [kg] / []
+        elif self.species == 'OXYGEN':
+            self.species = 'O'
+            m = 16 * m_p
 
-#         df['j2psd'] = \
-#             (m**2 / e**2) / np.sqrt(df['Ehigh'] * df['Elow']) \
-#                 / (2 * 1e14)
+        elif self.species == 'SULFUR':
+            self.species = 'S'
+            m = 32 * m_p
 
+        elif self.species == 'PROTON':
+            self.species = 'H+'
+            m = m_p * 1.0
 
-#         self.metadata = df.copy()
+        else:
+            self.species = 'e-'
+            m = m_e * 1.0
 
-#         # Specify negative values as 0 or no-count
-#         vals = self.df_raw.loc[:, self.metadata['channel']].values
-#         vals[vals < 0] = 0.
-#         self.df_raw.loc[:, self.metadata['channel']] = vals
+        # Conversion faction from J to PSD
+        # f = m / v^2 j
+        #   = [kg] / []
 
-#         if len(df.index) % self.nSSD == 0:
-#             self.nChannels = int(len(df.index) / self.nSSD)
-#         else:
-#             raise Exception('Unequal energy channels within each SSD.')
+        df['j2psd'] = \
+            (m**2 / e**2) / np.sqrt(df['Ehigh'] * df['Elow']) \
+                / (2 * 1e14)
 
 
-#     def mask_invalid_pa(self):
-#         """
-#         Mask all values outside the valid pitch angle range.
-#         """
-#         for i in range(self.nSSD):
-#             channels = self.metadata.loc[
-#                 self.metadata['channel'].str.contains('T{:d}'.format(i)),
-#                 'channel']
+        self.metadata = df.copy()
 
-#             condition = (
-#                 (self.df_raw['Pitch_Angle_T{:d}'.format(i)] < self.paMin) |
-#                 (self.df_raw['Pitch_Angle_T{:d}'.format(i)] > self.paMax))
+        # Specify negative values as 0 or no-count
+        vals = self.df_raw.loc[:, self.metadata['channel']].values
+        vals[vals < 0] = 0.
+        self.df_raw.loc[:, self.metadata['channel']] = vals
 
-#             self.df_raw.loc[condition, 'Pitch_Angle_T{:d}'.format(i)] = np.nan
+        if len(df.index) % self.num_ssd == 0:
+            self.num_channels = int(len(df.index) / self.num_ssd)
+        else:
+            raise Exception('Unequal energy channels within each SSD.')
 
 
-#     def convert_to_hdf_file(self):
-#         """
-#         Save the dataframe information into hdf5 files.
-#         """
-#         hdf5filename = self.filename[:-4] + '.hdf5'
-#         self.df_raw.to_hdf(hdf5filename, 'df_raw', mode='a')
-#         self.metadata.to_hdf(hdf5filename, 'metadata', mode='a')
-#         os.remove(self.filename)
-#         self.filename = hdf5filename
+    def mask_invalid_pa(self):
+        """
+        Mask all values outside the valid pitch angle range.
+        """
+        for i in range(self.num_ssd):
+            channels = self.metadata.loc[
+                self.metadata['channel'].str.contains('T{:d}'.format(i)),
+                'channel']
 
+            condition = (
+                (self.df_raw['Pitch_Angle_T{:d}'.format(i)] < self.paMin) |
+                (self.df_raw['Pitch_Angle_T{:d}'.format(i)] > self.paMax))
 
-#     def read_hdf_file(self):
-#         """
-#         Read the dataframe information from hdf5 files.
-#         """
-#         self.df_raw = pd.read_hdf(self.filename, key='df_raw')
-#         self.metadata = pd.read_hdf(self.filename, key='metadata')
+            self.df_raw.loc[condition, 'Pitch_Angle_T{:d}'.format(i)] = np.nan
 
 
-#     def calc_phase_space_density(self):
-#         """We add columns of PSD to the df_raw DataFrame. Also change the
-#         metadata DataFrame to reflect the new channel names."""
+    def convert_to_hdf_file(self):
+        """
+        Save the dataframe information into hdf5 files.
+        """
+        hdf5filename = self.filename[:-4] + '.hdf5'
+        self.df_raw.to_hdf(hdf5filename, 'df_raw', mode='a')
+        self.metadata.to_hdf(hdf5filename, 'metadata', mode='a')
+        os.remove(self.filename)
+        self.filename = hdf5filename
 
-#         self.metadata['channelpsd'] = self.metadata.apply(
-#             lambda x: x['channel'].replace('FLUX', 'PSD'), axis=1)
 
-#         df = pd.DataFrame(
-#             index=self.df_raw.index, columns=self.metadata['channelpsd'])
-#         for _, row in self.metadata.iterrows():
-#             df[row['channelpsd']] = \
-#                 self.df_raw[row['channel']] * row['j2psd']
+    def read_hdf_file(self):
+        """
+        Read the dataframe information from hdf5 files.
+        """
+        self.df_raw = pd.read_hdf(self.filename, key='df_raw')
+        self.metadata = pd.read_hdf(self.filename, key='metadata')
 
-#         self.df_raw = pd.concat([self.df_raw, df], axis=1)
 
-#         self.metadata.drop(labels='channel', axis=1, inplace=True)
-#         self.metadata.rename(columns={'channelpsd': 'channel'}, inplace=True)
+    def calc_phase_space_density(self):
+        """We add columns of PSD to the df_raw DataFrame. Also change the
+        metadata DataFrame to reflect the new channel names."""
 
+        self.metadata['channelpsd'] = self.metadata.apply(
+            lambda x: x['channel'].replace('FLUX', 'PSD'), axis=1)
 
-#     def create_energytime_df(self):
-#         """
-#         Create the energy-time spectra in the form of a dataframe.
-#         """
-#         if self.efilter:
-#             self.energybins = np.exp(np.linspace(
-#                 np.log(self.efilter[0]), np.log(self.efilter[1]),
-#                 self.nEbins + 1))
-#         else:
-#             self.energybins = np.exp(np.linspace(
-#                 np.log(self.metadata['Elow'].min()),
-#                 np.log(self.metadata['Ehigh'].max()), self.nEbins + 1))
+        df = pd.DataFrame(
+            index=self.df_raw.index, columns=self.metadata['channelpsd'])
+        for _, row in self.metadata.iterrows():
+            df[row['channelpsd']] = \
+                self.df_raw[row['channel']] * row['j2psd']
 
-#         self.energytime = pd.DataFrame(
-#             index=self.df_raw.index,
-#             columns=['Ebin_{:d}'.format(x) for x in range(self.nEbins)])
+        self.df_raw = pd.concat([self.df_raw, df], axis=1)
 
-#         for j in range(self.nEbins):
+        self.metadata.drop(labels='channel', axis=1, inplace=True)
+        self.metadata.rename(columns={'channelpsd': 'channel'}, inplace=True)
 
-#             meta = self.metadata.copy()
 
-#             meta['deltaE'] = meta['Ehigh'] - meta['Elow']
+    def create_energytime_df(self):
+        """
+        Create the energy-time spectra in the form of a dataframe.
+        """
+        if self.efilter:
+            self.energybins = np.exp(np.linspace(
+                np.log(self.efilter[0]), np.log(self.efilter[1]),
+                self.nEbins + 1))
+        else:
+            self.energybins = np.exp(np.linspace(
+                np.log(self.metadata['Elow'].min()),
+                np.log(self.metadata['Ehigh'].max()), self.nEbins + 1))
 
-#             # Prevalence of each channel in this energy bins.
-#             meta['dE'] = np.minimum(meta['Ehigh'], self.energybins[j + 1]) - \
-#                          np.maximum(meta['Elow'],  self.energybins[j])
+        self.energytime = pd.DataFrame(
+            index=self.df_raw.index,
+            columns=['Ebin_{:d}'.format(x) for x in range(self.nEbins)])
 
+        for j in range(self.nEbins):
 
-#             meta = meta[~(meta['dE'] < 0)]
+            meta = self.metadata.copy()
 
-#             # Now we know the energy channels that are present within the j-th
-#             # energy bin. Knowing this, we can identify the pitch
-#             # angle associated with each energy channel.
+            meta['deltaE'] = meta['Ehigh'] - meta['Elow']
 
-#             denom = np.zeros(len(self.df_raw.index))
-#             val = np.zeros(len(self.df_raw.index))
+            # Prevalence of each channel in this energy bins.
+            meta['dE'] = np.minimum(meta['Ehigh'], self.energybins[j + 1]) - \
+                         np.maximum(meta['Elow'],  self.energybins[j])
 
-#             for _, row in meta.iterrows():
 
-#                 scope = row['channel'][:2]    # Get telescope ID for E channel
-#                 pa = self.df_raw.loc[:, 'Pitch_Angle_{:s}'.format(scope)]\
-#                     .astype(float).values
+            meta = meta[~(meta['dE'] < 0)]
 
-#                 # This is the solid angle of the measurement at a particular
-#                 # pitch angle, given that JEDI-I has an angular resolution of
-#                 # approximately 26.7 degrees.
-#                 deltaSigma = 4 * np.pi * np.sin(pa * np.pi / 180) \
-#                              * np.sin(13.35 * np.pi / 180)
+            # Now we know the energy channels that are present within the j-th
+            # energy bin. Knowing this, we can identify the pitch
+            # angle associated with each energy channel.
 
-#                 # Need to ignore NaN values while summing.
-#                 deltaSigma[np.isnan(deltaSigma)] = 0
-#                 intensities = self.df_raw.loc[:, row['channel']].fillna(0)
+            denom = np.zeros(len(self.df_raw.index))
+            val = np.zeros(len(self.df_raw.index))
 
-#                 # deltaSigma[intensities == 0] = 0
+            for _, row in meta.iterrows():
 
-#                 val += intensities * row['dE'] # * deltaSigma
-#                 denom += row['dE'] # * deltaSigma
+                scope = row['channel'][:2]    # Get telescope ID for E channel
+                pa = self.df_raw.loc[:, 'Pitch_Angle_{:s}'.format(scope)]\
+                    .astype(float).values
 
-#                 # How to handle nans?
+                # This is the solid angle of the measurement at a particular
+                # pitch angle, given that JEDI-I has an angular resolution of
+                # approximately 26.7 degrees.
+                deltaSigma = 4 * np.pi * np.sin(pa * np.pi / 180) \
+                             * np.sin(13.35 * np.pi / 180)
 
-#             condition =  (denom > 0)
+                # Need to ignore NaN values while summing.
+                deltaSigma[np.isnan(deltaSigma)] = 0
+                intensities = self.df_raw.loc[:, row['channel']].fillna(0)
 
-#             self.energytime.loc[condition, 'Ebin_{:d}'.format(j)] = \
-#                 val[condition] / denom[condition]
+                # deltaSigma[intensities == 0] = 0
 
-#             self.energytime.loc[~condition, 'Ebin_{:d}'.format(j)] = np.nan
+                val += intensities * row['dE'] # * deltaSigma
+                denom += row['dE'] # * deltaSigma
 
+                # How to handle nans?
 
-#     def create_pitchangle_df(self, eqpad=False):
-#         """
-#         Create pitchangle spectra by averaging over energy channels and
-#         accounting for their width.
-#         """
-#         if eqpad:
-#             s = 'EQ'
-#             nbins = self.nEQPAbins
-#             bins = np.linspace(0, 90, nbins + 1)
-#         else:
-#             s = ''
-#             nbins = self.nPAbins
-#             bins = np.linspace(0, 180, nbins + 1)
+            condition =  (denom > 0)
 
-#         df = pd.DataFrame(
-#             data=0.,
-#             index=self.df_raw.index,
-#             columns=\
-#                 ['PAbin_{:d}'.format(x) for x in range(nbins)])
+            self.energytime.loc[condition, 'Ebin_{:d}'.format(j)] = \
+                val[condition] / denom[condition]
 
-#         df_nSSD = pd.DataFrame(
-#             index=self.df_raw.index,
-#             columns=['nSSDbin_{:d}'.format(x) for x in range(nbins)],
-#             data=0.)
+            self.energytime.loc[~condition, 'Ebin_{:d}'.format(j)] = np.nan
 
-#         datacols = []    # Identify data columns for each SSD beforehand
-#         energybinsize = [] # np.zeros((len(self.index), self.nSSD))
-#         for j in range(self.nSSD):
 
-#             condition = self.metadata['channel'].str.contains('T{:d}'.format(j))
-#             datacols.append(
-#                 self.metadata.loc[condition, 'channel'])
+    def create_pitchangle_df(self, eqpad=False):
+        """
+        Create pitchangle spectra by averaging over energy channels and
+        accounting for their width.
+        """
+        if eqpad:
+            s = 'EQ'
+            nbins = self.nEQPAbins
+            bins = np.linspace(0, 90, nbins + 1)
+        else:
+            s = ''
+            nbins = self.nPAbins
+            bins = np.linspace(0, 180, nbins + 1)
 
-#             energybinsize.append(
-#                 self.metadata.loc[condition, 'Ehigh'] -
-#                 self.metadata.loc[condition, 'Elow'])
+        df = pd.DataFrame(
+            data=0.,
+            index=self.df_raw.index,
+            columns=\
+                ['PAbin_{:d}'.format(x) for x in range(nbins)])
 
-#         for i in range(nbins):
-#             for j in range(self.nSSD):
+        df_nSSD = pd.DataFrame(
+            index=self.df_raw.index,
+            columns=['nSSDbin_{:d}'.format(x) for x in range(nbins)],
+            data=0.)
 
-#                 condition = (
-#                 (self.df_raw['{:s}Pitch_Angle_T{:d}'.format(s, j)] > bins[i]) &
-#                 (self.df_raw['{:s}Pitch_Angle_T{:d}'.format(s, j)] <=
-#                     bins[i + 1]))
+        datacols = []    # Identify data columns for each SSD beforehand
+        energybinsize = [] # np.zeros((len(self.index), self.nSSD))
+        for j in range(self.num_ssd):
 
-#                 # Average all channels for one SSD and consider width of
-#                 # energy bin as weight.
-#                 val = self.df_raw.loc[condition, datacols[j]].values
+            condition = self.metadata['channel'].str.contains('T{:d}'.format(j))
+            datacols.append(
+                self.metadata.loc[condition, 'channel'])
 
-#                 df.loc[condition, 'PAbin_{:d}'.format(i)] += \
-#                     np.average(val, axis=1, weights=energybinsize[j])
+            energybinsize.append(
+                self.metadata.loc[condition, 'Ehigh'] -
+                self.metadata.loc[condition, 'Elow'])
 
-#                 # Count number of SSDs in this PA bin
-#                 df_nSSD.loc[condition, 'nSSDbin_{:d}'.format(i)] += 1
+        for i in range(nbins):
+            for j in range(self.num_ssd):
 
-#             # If multiple SSDs in the bin, divide by this number
-#             condition = (df_nSSD['nSSDbin_{:d}'.format(i)] > 0)
+                condition = (
+                (self.df_raw['{:s}Pitch_Angle_T{:d}'.format(s, j)] > bins[i]) &
+                (self.df_raw['{:s}Pitch_Angle_T{:d}'.format(s, j)] <=
+                    bins[i + 1]))
 
-#             df.loc[condition, 'PAbin_{:d}'.format(i)] /= \
-#                 df_nSSD.loc[condition, 'nSSDbin_{:d}'.format(i)]
+                # Average all channels for one SSD and consider width of
+                # energy bin as weight.
+                val = self.df_raw.loc[condition, datacols[j]].values
 
-#             df.loc[~condition, 'PAbin_{:d}'.format(i)] = np.nan
+                df.loc[condition, 'PAbin_{:d}'.format(i)] += \
+                    np.average(val, axis=1, weights=energybinsize[j])
 
-#         if eqpad:
-#             self.eqpad = df
-#             self.eq_pitchanglebins = bins
-#             self.hasEQPAD = True
-#         else:
-#             self.pitchangletime = df
-#             self.pitchanglebins = bins
+                # Count number of SSDs in this PA bin
+                df_nSSD.loc[condition, 'nSSDbin_{:d}'.format(i)] += 1
 
+            # If multiple SSDs in the bin, divide by this number
+            condition = (df_nSSD['nSSDbin_{:d}'.format(i)] > 0)
 
-#     def create_energy_pitchangle_array(self):
-#         """
-#         Create an array analogous to the JADE data structure organized by
-#         (pitchangle, energy, time)
-#         """
-#         data = np.zeros((
-#             len(self.pitchanglebins) - 1,
-#             len(self.nEbins) - 1,
-#             len(self.df_raw.index)))
+            df.loc[condition, 'PAbin_{:d}'.format(i)] /= \
+                df_nSSD.loc[condition, 'nSSDbin_{:d}'.format(i)]
 
-#         for i, row in self.df_raw.iterrows():
-#             pass
+            df.loc[~condition, 'PAbin_{:d}'.format(i)] = np.nan
 
+        if eqpad:
+            self.eqpad = df
+            self.eq_pitchanglebins = bins
+            self.has_eqpad = True
+        else:
+            self.pitchangletime = df
+            self.pitchanglebins = bins
 
-#     def calc_equatorial_pad(self):
-#         """
-#         Create new columns called EQPitch_Angles corresponding to the
-#         equatorial pitch angle for each Pitch_Angle column.
-#         """
-#         self.pa_database = pd.read_hdf(self.dbfile)
 
-#         df = pd.DataFrame(
-#             index=self.df_raw.index,
-#             columns=['EQPitch_Angle_T{:d}'.format(x) for x in range(self.nSSD)])
+    def create_energy_pitchangle_array(self):
+        """
+        Create an array analogous to the JADE data structure organized by
+        (pitchangle, energy, time)
+        """
+        data = np.zeros((
+            len(self.pitchanglebins) - 1,
+            len(self.nEbins) - 1,
+            len(self.df_raw.index)))
 
-#         self.df_raw = pd.concat([self.df_raw, df], axis=1)
+        for i, row in self.df_raw.iterrows():
+            pass
 
-#         positionJuno, _ = get_juno_position(
-#             self.df_raw.index, coordsystem='JUNO_MAG_VIP4')
 
-#         pacols = ['Pitch_Angle_T{:d}'.format(x) for x in range(self.nSSD)]
-#         eqpacols = ['EQPitch_Angle_T{:d}'.format(x) for x in range(self.nSSD)]
+    def calc_equatorial_pad(self):
+        """
+        Create new columns called EQPitch_Angles corresponding to the
+        equatorial pitch angle for each Pitch_Angle column.
+        """
+        self.pa_database = pd.read_hdf(self.dbfile)
 
-#         pavalues = self.df_raw.loc[:, pacols].values.astype(float)
+        df = pd.DataFrame(
+            index=self.df_raw.index,
+            columns=['EQPitch_Angle_T{:d}'.format(x) for x in range(self.num_ssd)])
 
-#         pavalues[((positionJuno[:, 2] >= 0) & (pavalues <= 90).T).T] = np.nan
-#         pavalues[((positionJuno[:, 2] <  0) & (pavalues >= 90).T).T] = np.nan
+        self.df_raw = pd.concat([self.df_raw, df], axis=1)
 
-#         count = 0
-#         for t in self.df_raw.index:
+        positionJuno, _ = get_juno_position(
+            self.df_raw.index, coordsystem='JUNO_MAG_VIP4')
 
-#             db = self.pa_database.loc[
-#                 t - dt.timedelta(minutes=2.5):
-#                 t + dt.timedelta(minutes=2.5)].copy()
+        pacols = ['Pitch_Angle_T{:d}'.format(x) for x in range(self.num_ssd)]
+        eqpacols = ['EQPitch_Angle_T{:d}'.format(x) for x in range(self.num_ssd)]
 
-#             if len(db.index) == 0:
-#                 self.df_raw.loc[t, eqpacols] = np.nan
-#                 continue
+        pavalues = self.df_raw.loc[:, pacols].values.astype(float)
 
-#             Beq = np.nanmean(db['Beq'].values)
+        pavalues[((positionJuno[:, 2] >= 0) & (pavalues <= 90).T).T] = np.nan
+        pavalues[((positionJuno[:, 2] <  0) & (pavalues >= 90).T).T] = np.nan
 
-#             Blocal = np.nanmean(db['Blocal_model'].values)
+        count = 0
+        for t in self.df_raw.index:
 
-#             if Beq > Blocal:
-#                 self.df_raw.loc[t, eqpacols] = np.arcsin(
-#                     np.sin(pavalues[count, :] * np.pi / 180)) * 180 / np.pi
-#             else:
-#                 self.df_raw.loc[t, eqpacols] = np.arcsin(
-#                     np.sin(pavalues[count, :] * np.pi / 180) * \
-#                     np.sqrt(Beq / Blocal)) * 180 / np.pi
+            db = self.pa_database.loc[
+                t - dt.timedelta(minutes=2.5):
+                t + dt.timedelta(minutes=2.5)].copy()
 
-#             count += 1
+            if len(db.index) == 0:
+                self.df_raw.loc[t, eqpacols] = np.nan
+                continue
 
+            Beq = np.nanmean(db['Beq'].values)
 
-#     def resample(self):
-#         """
-#         Resample the time-series DataFrames according to the dtbin specified
-#         by the user.
-#         """
-#         self.energytime = self.energytime\
-#             .resample(self.dtbin, offset=self.dtbin/2)\
-#             .agg(np.nanmean)
+            Blocal = np.nanmean(db['Blocal_model'].values)
 
-#         self.pitchangletime = self.pitchangletime\
-#             .resample(self.dtbin, offset=self.dtbin/2)\
-#             .agg(np.nanmean)
+            if Beq > Blocal:
+                self.df_raw.loc[t, eqpacols] = np.arcsin(
+                    np.sin(pavalues[count, :] * np.pi / 180)) * 180 / np.pi
+            else:
+                self.df_raw.loc[t, eqpacols] = np.arcsin(
+                    np.sin(pavalues[count, :] * np.pi / 180) * \
+                    np.sqrt(Beq / Blocal)) * 180 / np.pi
 
-#         if self.dbfile:
-#             self.eqpad = self.eqpad\
-#                 .resample(self.dtbin, offset=self.dtbin/2)\
-#                 .agg(np.nanmean)
+            count += 1
 
-#         if self.hasCXrate:
-#             self.cxrate = self.cxrate\
-#                 .resample(self.dtbin, offset=self.dtbin/2)\
-#                 .agg(np.nanmean)
 
-#                 # .resample(dt.timedelta(seconds=30), offset=dt.timedelta(seconds=15))\
-#                 # .agg(np.nansum)\
+    def resample(self):
+        """
+        Resample the time-series DataFrames according to the dtbin specified
+        by the user.
+        """
+        self.energytime = self.energytime\
+            .resample(self.dtbin, offset=self.dtbin/2)\
+            .agg(np.nanmean)
 
-#                 # We assume that every JEDI measurement measures the full-sky
-#                 # distribution. Unlike JADE, JEDI-90 and 270 sample the full-sky
-#                 # provided the magnetic field is in the spin plane.
+        self.pitchangletime = self.pitchangletime\
+            .resample(self.dtbin, offset=self.dtbin/2)\
+            .agg(np.nanmean)
 
-#         # if self.hasEflux:
-#         #     self.energyflux = self.energyflux\
-#         #         .resample(self.dtbin, offset=self.dtbin/2)\
-#         #         .agg(np.nanmean)
+        if self.dbfile:
+            self.eqpad = self.eqpad\
+                .resample(self.dtbin, offset=self.dtbin/2)\
+                .agg(np.nanmean)
 
+        if self.has_cx_rate:
+            self.cxrate = self.cxrate\
+                .resample(self.dtbin, offset=self.dtbin/2)\
+                .agg(np.nanmean)
 
-#     def plot_spectra(
-#         self, ax, data='Energy', donorm=False,
-#         vmin=None, vmax=None, cmap=None, logplot=True, label=None):
-#         """
-#         Generic method to plot a timeseries spectra.
-#         """
-#         if data == 'Energy':
-#             ax.set_yscale('log')
-#             ax.set_yticks([100, 1000, 10000])
-#             df = self.energytime
-#             bins = self.energybins
-#         elif data == 'PAD':
-#             ax.set_yticks([0, 90, 180])
-#             df = self.pitchangletime
-#             bins = self.pitchanglebins
-#         elif data == 'EQPAD':
-#             ax.set_yticks([0, 45, 90])
-#             df = self.eqpad
-#             bins = self.eq_pitchanglebins
-#         elif data == 'cxrate':
-#             ax.set_yscale('log')
-#             ax.set_yticks([100, 1000, 10000])
-#             df = self.cxrate
-#             bins = self.energybins
+                # .resample(dt.timedelta(seconds=30), offset=dt.timedelta(seconds=15))\
+                # .agg(np.nansum)\
 
+                # We assume that every JEDI measurement measures the full-sky
+                # distribution. Unlike JADE, JEDI-90 and 270 sample the full-sky
+                # provided the magnetic field is in the spin plane.
 
-#         # x-data , shifted left by half of dtbin
-#         timearray = (df.index - self.dtbin / 2).to_pydatetime()
-#         timearray = np.append(
-#             timearray, timearray[-1] + (timearray[1] - timearray[0]))
+        # if self.hasEflux:
+        #     self.energyflux = self.energyflux\
+        #         .resample(self.dtbin, offset=self.dtbin/2)\
+        #         .agg(np.nanmean)
 
-#         # y-data is just bins
 
-#         # z-data is the values of the timeseries DataFrame (transposed)
-#         z = df.values.T
+    def plot_spectra(
+        self, ax, data='Energy', donorm=False,
+        vmin=None, vmax=None, cmap=None, logplot=True, label=None):
+        """
+        Generic method to plot a timeseries spectra.
+        """
+        if data == 'Energy':
+            ax.set_yscale('log')
+            ax.set_yticks([100, 1000, 10000])
+            df = self.energytime
+            bins = self.energybins
+        elif data == 'PAD':
+            ax.set_yticks([0, 90, 180])
+            df = self.pitchangletime
+            bins = self.pitchanglebins
+        elif data == 'EQPAD':
+            ax.set_yticks([0, 45, 90])
+            df = self.eqpad
+            bins = self.eq_pitchanglebins
+        elif data == 'cxrate':
+            ax.set_yscale('log')
+            ax.set_yticks([100, 1000, 10000])
+            df = self.cxrate
+            bins = self.energybins
 
-#         if donorm:
-#             z /= np.nanmean(z, axis=0)
 
-#         if logplot:
-#             norm = colors.LogNorm(vmin=vmin, vmax=vmax)
-#         else:
-#             norm = colors.Normalize(vmin=vmin, vmax=vmax)
+        # x-data , shifted left by half of dtbin
+        timearray = (df.index - self.dtbin / 2).to_pydatetime()
+        timearray = np.append(
+            timearray, timearray[-1] + (timearray[1] - timearray[0]))
 
-#         mp = ax.pcolormesh(timearray, bins, z, norm=norm, cmap=cmap)
+        # y-data is just bins
 
-#         ax.set_ylim([bins[0], bins[-1]])
+        # z-data is the values of the timeseries DataFrame (transposed)
+        z = df.values.T
 
-#         bbox = ax.get_position()
-#         cax = ax.figure.add_axes(
-#             [bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
-#         cbar = ax.figure.colorbar(mp, cax=cax)
+        if donorm:
+            z /= np.nanmean(z, axis=0)
 
-#         if label:
-#             ax.text(0.1, 1.05, label, transform=ax.transAxes)
+        if logplot:
+            norm = colors.LogNorm(vmin=vmin, vmax=vmax)
+        else:
+            norm = colors.Normalize(vmin=vmin, vmax=vmax)
 
-#         return ax
+        mp = ax.pcolormesh(timearray, bins, z, norm=norm, cmap=cmap)
 
+        ax.set_ylim([bins[0], bins[-1]])
 
-#     def find_valid_data_time(self):
-#         """Find times with valid data."""
-#         val = self.eqpad.values
-#         count = 0
-#         for i in range(val.shape[0]):
-#             if np.count_nonzero(np.isnan(val[i, :])) < 2:
-#                 count += 1
+        bbox = ax.get_position()
+        cax = ax.figure.add_axes(
+            [bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1- bbox.y0)])
+        cbar = ax.figure.colorbar(mp, cax=cax)
 
-#         return (count * (self.eqpad.index[1] - self.eqpad.index[0])).total_seconds()
+        if label:
+            ax.text(0.1, 1.05, label, transform=ax.transAxes)
 
+        return ax
 
-#     def calc_energy_flux(self, pa1=0, pa2=15):
-#         """
-#         Calculate the upward/downward energy flux based on the formula given
-#         in Mauk et al. (2014).
-#         pa1, pa2 are in degrees.
-#         """
 
-#         self.energyflux = pd.Series(index=self.df_raw.index, data=0.)
+    def find_valid_data_time(self):
+        """Find times with valid data."""
+        val = self.eqpad.values
+        count = 0
+        for i in range(val.shape[0]):
+            if np.count_nonzero(np.isnan(val[i, :])) < 2:
+                count += 1
 
-#         for j in range(self.nSSD):
+        return (count * (self.eqpad.index[1] - self.eqpad.index[0])).total_seconds()
 
-#             condition = (
-#                 (self.df_raw['Pitch_Angle_T{:d}'.format(j)] >= pa1) &
-#                 (self.df_raw['Pitch_Angle_T{:d}'.format(j)] <= pa2)
-#             )
 
-#             channels = self.metadata['channel'].str.contains('T{:d}'.format(j))
-#             datacols = self.metadata.loc[channels, 'channel']
+    def calc_energy_flux(self, pa1=0, pa2=15):
+        """
+        Calculate the upward/downward energy flux based on the formula given
+        in Mauk et al. (2014).
+        pa1, pa2 are in degrees.
+        """
 
-#             deltaE = self.metadata.loc[channels, 'Ehigh'] - \
-#                      self.metadata.loc[channels, 'Elow']
+        self.energyflux = pd.Series(index=self.df_raw.index, data=0.)
 
-#             midE = np.sqrt(
-#                 self.metadata.loc[channels, 'Ehigh'] * \
-#                 self.metadata.loc[channels, 'Elow']
-#             )
+        for j in range(self.num_ssd):
 
-#             for i, col in enumerate(datacols):
+            condition = (
+                (self.df_raw['Pitch_Angle_T{:d}'.format(j)] >= pa1) &
+                (self.df_raw['Pitch_Angle_T{:d}'.format(j)] <= pa2)
+            )
 
-#                 val = self.df_raw.loc[:, col].values
-#                 val[~condition] = 0.
+            channels = self.metadata['channel'].str.contains('T{:d}'.format(j))
+            datacols = self.metadata.loc[channels, 'channel']
 
-#                 self.energyflux += val \
-#                     * deltaE.iloc[i] * midE.iloc[i] \
-#                     * np.pi * e * 1e10     # Unit conversion and
-#                                            # "Area-projected weighted size" ?
+            deltaE = self.metadata.loc[channels, 'Ehigh'] - \
+                     self.metadata.loc[channels, 'Elow']
 
-#         self.energyflux[self.energyflux == 0] = np.nan
-#         self.hasEflux = True
+            midE = np.sqrt(
+                self.metadata.loc[channels, 'Ehigh'] * \
+                self.metadata.loc[channels, 'Elow']
+            )
 
+            for i, col in enumerate(datacols):
 
-# def merge_two_timeseries(df1, df2):
-#     df = pd.concat([df1, df2])
-#     return df.groupby(df.index).agg(lambda x: np.nanmean(x))
+                val = self.df_raw.loc[:, col].values
+                val[~condition] = 0.
 
+                self.energyflux += val \
+                    * deltaE.iloc[i] * midE.iloc[i] \
+                    * np.pi * e * 1e10     # Unit conversion and
+                                           # "Area-projected weighted size" ?
 
-# def jedi_merge(j1, j2):
-#     """
-#     Merge two Jedi datafiles that have been resampled and created using the
-#     same parameters.
-#     """
-#     j3 = JediData()
+        self.energyflux[self.energyflux == 0] = np.nan
+        self.has_energy_flux = True
 
-#     if j1.hasValidData and not j2.hasValidData: return j1
-#     if j2.hasValidData and not j1.hasValidData: return j2
-#     if not j1.hasValidData and not j2.hasValidData:
-#         return j3
 
-#     assert (j1.species == j2.species)     ; j3.species = j1.species
-#     assert (j1.dtbin == j1.dtbin)         ; j3.dtbin = j1.dtbin
-#     assert (j1.efilter == j2.efilter)     ; j3.efilter = j1.efilter
-#     assert (j1.units == j2.units)         ; j3.units = j1.units
-#     assert (j1.dbfile == j2.dbfile)       ; j3.dbfile = j1.dbfile
-#     assert (j1.nEbins == j2.nEbins)       ; j3.nEbins = j1.nEbins
-#     assert (j1.nPAbins == j2.nPAbins)     ; j3.nPAbins = j1.nPAbins
-#     assert (j1.start == j2.start and j1.stop == j2.stop)
-#     assert (j1.nEQPAbins == j2.nEQPAbins) ; j3.nEQPAbins = j1.nEQPAbins
+def merge_two_timeseries(df1, df2):
+    df = pd.concat([df1, df2])
+    return df.groupby(df.index).agg(lambda x: np.nanmean(x))
 
-#     j3.start = j1.start
-#     j3.stop = j1.stop
 
-#     j3.energybins = j1.energybins
-#     j3.pitchanglebins = j1.pitchanglebins
-#     j3.energytime = merge_two_timeseries(j1.energytime, j2.energytime)
-#     j3.pitchangletime = merge_two_timeseries(
-#         j1.pitchangletime, j2.pitchangletime)
-#     j3.hasValidData = True
+def jedi_merge(j1, j2):
+    """
+    Merge two Jedi datafiles that have been resampled and created using the
+    same parameters.
+    """
+    j3 = JediData()
 
-#     if j1.hasEQPAD and j2.hasEQPAD:
-#         j3.eq_pitchanglebins = j1.eq_pitchanglebins
-#         j3.eqpad = merge_two_timeseries(j1.eqpad, j2.eqpad)
-#         j3.hasEQPAD = True
+    if j1.hasValidData and not j2.hasValidData: return j1
+    if j2.hasValidData and not j1.hasValidData: return j2
+    if not j1.hasValidData and not j2.hasValidData:
+        return j3
 
-#     if j1.hasCXrate and j2.hasCXrate:
-#         j3.cxrate = merge_two_timeseries(j1.cxrate, j2.cxrate)
-#         j3.hasCXrate = True
+    assert (j1.species == j2.species)     ; j3.species = j1.species
+    assert (j1.dtbin == j1.dtbin)         ; j3.dtbin = j1.dtbin
+    assert (j1.efilter == j2.efilter)     ; j3.efilter = j1.efilter
+    assert (j1.units == j2.units)         ; j3.units = j1.units
+    assert (j1.dbfile == j2.dbfile)       ; j3.dbfile = j1.dbfile
+    assert (j1.nEbins == j2.nEbins)       ; j3.nEbins = j1.nEbins
+    assert (j1.nPAbins == j2.nPAbins)     ; j3.nPAbins = j1.nPAbins
+    assert (j1.start == j2.start and j1.stop == j2.stop)
+    assert (j1.nEQPAbins == j2.nEQPAbins) ; j3.nEQPAbins = j1.nEQPAbins
 
-#     if j1.hasEflux and j2.hasEflux:
-#         j3.energyflux = merge_two_timeseries(j1.energyflux, j2.energyflux)
-#         j3.hasEflux = True
+    j3.start = j1.start
+    j3.stop = j1.stop
 
-#     return j3
+    j3.energybins = j1.energybins
+    j3.pitchanglebins = j1.pitchanglebins
+    j3.energytime = merge_two_timeseries(j1.energytime, j2.energytime)
+    j3.pitchangletime = merge_two_timeseries(
+        j1.pitchangletime, j2.pitchangletime)
+    j3.has_valid_data = True
 
+    if j1.hasEQPAD and j2.hasEQPAD:
+        j3.eq_pitchanglebins = j1.eq_pitchanglebins
+        j3.eqpad = merge_two_timeseries(j1.eqpad, j2.eqpad)
+        j3.has_eqpad = True
 
-# def get_jedi_data(**kwargs):
-#     """
-#     This script will return JEDI data from all three detectors for all times
-#     between start and end. The timeseries data from different days will be
-#     combined.
-#     """
-#     if 'ELECTRON' in kwargs['species']:
-#         idstring = 'ERSESP'
-#     elif kwargs['species'] == 'PROTON':
-#         idstring = 'ERSTOFXER'
-#     elif 'HEAVY' in kwargs['species']:
-#         idstring = 'NONPTOFXPHR'
-#     elif kwargs['species'] == 'PROTON_TOFxPH':
-#         idstring = 'ERSTOFXPHR'
-#     else:
-#         idstring = 'NONPTOFXER'
+    if j1.hasCXrate and j2.hasCXrate:
+        j3.cxrate = merge_two_timeseries(j1.cxrate, j2.cxrate)
+        j3.has_cx_rate = True
 
-#     datafolder = kwargs.pop('datafolder', 'data/jedi/')
-#     sensor = kwargs.pop('sensor', ['JED_090', 'JED_270', 'JED_180'])
+    if j1.hasEflux and j2.hasEflux:
+        j3.energyflux = merge_two_timeseries(j1.energyflux, j2.energyflux)
+        j3.has_energy_flux = True
 
-#     AllData = []
+    return j3
 
-#     for day in pd.date_range(kwargs['start'], kwargs['stop']):
-#         print(datafolder + day.strftime("/%Y/%j/") + '/*{:s}_CDR_{:s}_*.hdf5'.format(idstring, day.strftime('%Y%j')))
-#         dataFiles = glob.glob(
-#             datafolder + \
-#             day.strftime("/%Y/%j/") + \
-#             '/*{:s}_CDR_{:s}_*.hdf5'.format(idstring, day.strftime('%Y%j')))
 
-#         if 'JEDI-90' in sensor:
-#             dataFiles = [x for x in dataFiles if 'JED_090' in x]
-#         if 'JEDI-270' in sensor:
-#             dataFiles = [x for x in dataFiles if 'JED_270' in x]
-#         if 'JEDI-180' in sensor:
-#             dataFiles = [x for x in dataFiles if 'JED_180' in x]
+def get_jedi_data(**kwargs):
+    """
+    This script will return JEDI data from all three detectors for all times
+    between start and end. The timeseries data from different days will be
+    combined.
+    """
+    if 'ELECTRON' in kwargs['species']:
+        idstring = 'ERSESP'
+    elif kwargs['species'] == 'PROTON':
+        idstring = 'ERSTOFXER'
+    elif 'HEAVY' in kwargs['species']:
+        idstring = 'NONPTOFXPHR'
+    elif kwargs['species'] == 'PROTON_TOFxPH':
+        idstring = 'ERSTOFXPHR'
+    else:
+        idstring = 'NONPTOFXER'
 
-#         print(dataFiles)
-#         hrsfiles = [x for x in dataFiles if 'HI' in x or 'NONP' in x]
-#         lrsfiles = [x for x in dataFiles if 'LO' in x]
+    datafolder = kwargs.pop('datafolder', 'data/jedi/')
+    sensor = kwargs.pop('sensor', ['JED_090', 'JED_270', 'JED_180'])
 
-#         if len(hrsfiles) > 0:
-#             data_hrs = JediData(filename=hrsfiles[0], **kwargs)
-#             for i in range(1, len(hrsfiles)):
-#                 data_hrs = jedi_merge(
-#                     data_hrs, JediData(filename=hrsfiles[i], **kwargs))
-#         else:
-#             data_hrs = JediData()
+    AllData = []
 
-#         if len(lrsfiles) > 0:
-#             data_lrs = JediData(filename=lrsfiles[0], **kwargs)
-#             for i in range(1, len(lrsfiles)):
-#                 data_lrs = jedi_merge(
-#                     data_lrs, JediData(filename=lrsfiles[i], **kwargs))
-#         else:
-#             data_lrs = JediData()
+    for day in pd.date_range(kwargs['start'], kwargs['stop']):
+        print(datafolder + day.strftime("/%Y/%j/") + '/*{:s}_CDR_{:s}_*.hdf5'.format(idstring, day.strftime('%Y%j')))
+        dataFiles = glob.glob(
+            datafolder + \
+            day.strftime("/%Y/%j/") + \
+            '/*{:s}_CDR_{:s}_*.hdf5'.format(idstring, day.strftime('%Y%j')))
 
-#         AllData.append(jedi_merge(data_hrs, data_lrs))
+        if 'JEDI-90' in sensor:
+            dataFiles = [x for x in dataFiles if 'JED_090' in x]
+        if 'JEDI-270' in sensor:
+            dataFiles = [x for x in dataFiles if 'JED_270' in x]
+        if 'JEDI-180' in sensor:
+            dataFiles = [x for x in dataFiles if 'JED_180' in x]
 
-#     # Merge different days together.
-#     data = AllData[0]
-#     for i in range(1, len(AllData)):
-#         data = jedi_merge(data, AllData[i])
+        print(dataFiles)
+        hrsfiles = [x for x in dataFiles if 'HI' in x or 'NONP' in x]
+        lrsfiles = [x for x in dataFiles if 'LO' in x]
 
-#     return data
+        if len(hrsfiles) > 0:
+            data_hrs = JediData(filename=hrsfiles[0], **kwargs)
+            for i in range(1, len(hrsfiles)):
+                data_hrs = jedi_merge(
+                    data_hrs, JediData(filename=hrsfiles[i], **kwargs))
+        else:
+            data_hrs = JediData()
+
+        if len(lrsfiles) > 0:
+            data_lrs = JediData(filename=lrsfiles[0], **kwargs)
+            for i in range(1, len(lrsfiles)):
+                data_lrs = jedi_merge(
+                    data_lrs, JediData(filename=lrsfiles[i], **kwargs))
+        else:
+            data_lrs = JediData()
+
+        AllData.append(jedi_merge(data_hrs, data_lrs))
+
+    # Merge different days together.
+    data = AllData[0]
+    for i in range(1, len(AllData)):
+        data = jedi_merge(data, AllData[i])
+
+    return data

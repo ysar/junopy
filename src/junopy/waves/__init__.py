@@ -1,1 +1,1 @@
-from .waves_survey import WavesData, get_waves_data, merge_wavesdata
+from .waves_survey import WavesSurveyData, get_waves_data_for_date

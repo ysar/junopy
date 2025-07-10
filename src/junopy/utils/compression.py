@@ -14,21 +14,24 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
 import shutil
 from isal import igzip
+from pathlib import Path
 
 
-def create_gz_zip_file(filename: str) -> None:
+def create_gz_zip_file(file_path: Path, remove_original: bool = True) -> None:
     """
     Compresses a file using igzip into a .gz file.
 
     Args:
-        filename (str):  Name of the file to be compressed.  This method will
-            create a new file with the same name with the '.gz' extension.  The
-            original file will be removed.
+        file_path(Path):  Path to file to be compressed.  This method will
+            create a new file with the same name with the '.gz' extension.
+        remove_original(bool):  If True, the original file will be deleted.
     """
-    with open(filename, "rb") as f_in:
-        with igzip.open(filename + ".gz", "wb") as f_out:
+    with open(file_path, "rb") as f_in:
+        suffix = file_path.suffix
+        with igzip.open(file_path.with_suffix(suffix + ".gz"), "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
-    os.remove(filename)
+
+    if remove_original:
+        file_path.unlink()

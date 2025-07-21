@@ -1,17 +1,6 @@
-# junopy - A Python API for the Juno spacecraft's particle and fields datasets.
-# Copyright (C) 2018  Yash Sarkango
+# Copyright (c) 2018 Yash Sarkango
+# Licensed under the MIT License
 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-from .mag import MagData, get_mag_data
+from .mag import MagData as MagData
+from .mag import load_mag_data as load_mag_data
+from .mag import get_mag_data as get_mag_data

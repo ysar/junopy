@@ -17,6 +17,7 @@
 Methods to calculate field quantities like the JRM magnetic field
 model and the CON2020 current sheet model.
 """
+
 import os
 import numpy as np
 import con2020
@@ -84,7 +85,6 @@ def calc_internal_field(r_a, theta, phi, g, h, N):
         inv_sintheta = 1.0 / sintheta
 
     for n in range(0, N + 1):
-
         m = 0
         sinphi_prev = 0.0
         cosphi_prev = 1.0
@@ -94,7 +94,6 @@ def calc_internal_field(r_a, theta, phi, g, h, N):
         Bphi += inv_sintheta * (a_r) ** (n + 2) * P[n, m] * m * (-h[n, m])
 
         for m in range(1, n + 1):
-
             sinmphi = sinphi_prev * cosphi + cosphi_prev * sinphi
             cosmphi = cosphi_prev * cosphi - sinphi_prev * sinphi
 
@@ -177,7 +176,6 @@ def calc_currentsheet_field(pos, equation_type="analytic", docurve=True):
 
 
 def trace_to_planet(start, g, h, N, deltaS=0.2, scheme="Euler"):
-
     streamline = np.zeros((10000, 3)) * np.nan
 
     streamline[0] = start
@@ -195,7 +193,6 @@ def trace_to_planet(start, g, h, N, deltaS=0.2, scheme="Euler"):
 
     i = 0
     while np.sqrt(np.sum(pos**2)) >= 0.99 and np.sqrt(np.sum(pos**2)) <= 100:
-
         r_a = np.sqrt(np.sum(pos**2))
         theta = np.arccos(pos[2] / r_a)
         phi = np.arctan2(pos[1], pos[0])
@@ -227,13 +224,11 @@ def trace_to_planet(start, g, h, N, deltaS=0.2, scheme="Euler"):
 
 
 def trace_field_bequator(start, g, h, N, deltaS=0.2, scheme="RK4"):
-
     pos = start * 1.0
     sign_prev = 1
     sign_next = 1
 
     while np.sqrt(np.sum(pos**2)) >= 0.99 and np.sqrt(np.sum(pos**2)) <= 100:
-
         r_a = np.sqrt(np.sum(pos**2))
         theta = np.arccos(pos[2] / r_a)
         phi = np.arctan2(pos[1], pos[0])
@@ -287,7 +282,6 @@ def get_B(pos, g, h, N, equation_type="analytic", normalize=True, docurve=True):
 def trace_field_dormandprince(
     start, gCoeff, hCoeff, N, h=0.2, Atol=1.0, equation_type="analytic", docurve=True
 ):
-
     streamline = np.zeros((10000, 3)) * np.nan
     streamline[0, :] = start * 1.0
 
@@ -334,14 +328,12 @@ def trace_field_dormandprince(
 
     count = 1
     while np.sqrt(np.sum(pos**2)) >= 0.999 and np.sqrt(np.sum(pos**2)) <= 100:
-
         pos_cap = pos * 1.0
         pos_new = pos * 1.0
 
         err = 2.0
 
         while err > 1.0:
-
             k[0, :] = get_B(
                 pos_new,
                 gCoeff,
@@ -354,7 +346,6 @@ def trace_field_dormandprince(
             ds = 0
 
             for i in range(1, 7):
-
                 posStep = pos_new * 1.0
                 for j in range(i):
                     posStep += h * a[i, j] * k[i - 1, :]
@@ -390,7 +381,6 @@ def trace_field_dormandprince(
 
 
 class TraceMShell:
-
     G_COEFF = np.array([[0.0, 0.0], [410993.4, 0.0]])
     H_COEFF = np.array([[0.0, 0.0], [0.0, 0.0]])
     N_COEFF = 1
@@ -468,13 +458,11 @@ class TraceMShell:
         count = 1
 
         while np.sqrt(np.sum(pos**2)) >= 0.999 and np.sqrt(np.sum(pos**2)) <= 100:
-
             pos_cap = pos * 1.0
             pos_new = pos * 1.0
 
             err = 2.0
             while err > 1.0:
-
                 k[0, :] = field.get_B(
                     pos_new,
                     self.G_COEFF,
@@ -488,7 +476,6 @@ class TraceMShell:
                 ds = 0
 
                 for i in range(1, 7):
-
                     posStep = pos_new * 1.0
                     for j in range(i):
                         posStep += h * a[i, j] * k[i - 1, :]
@@ -609,7 +596,6 @@ class TraceMShell:
         self.B0 = np.sqrt(np.sum(magVector**2))
 
     def calc_dBds(self):
-
         self.trace["dBds"] = np.gradient(self.trace["B"], self.trace["s"])
         self.calc_dBds = CubicSpline(self.trace["s"], self.trace["dBds"])
 

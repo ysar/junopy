@@ -1,20 +1,6 @@
-# junopy - A Python API for the Juno spacecraft's particle and fields datasets.
-# Copyright (C) 2018  Yash Sarkango
+# Copyright (c) 2018 Yash Sarkango
+# Licensed under the MIT License
 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-import os
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -23,6 +9,7 @@ import spiceypy
 import logging
 from functools import reduce
 
+from pathlib import Path
 from typing import Optional, Any
 from matplotlib import axes
 
@@ -53,7 +40,7 @@ class MagData(object):
 
     def __init__(
         self,
-        filename: Optional[str] = None,
+        filename: Optional[Path] = None,
         is_hdf: bool = True,
         start: Optional[dt.datetime] = None,
         stop: Optional[dt.datetime] = None,
@@ -64,7 +51,7 @@ class MagData(object):
         dataframe.
 
         Args:
-            filename (str | None): Name of the data file to be read.
+            filename (Path | None): Name of the data file to be read.
             is_hdf (bool): True if the data file is an HDF5 file.
             start: (dt.datetime | None): Filter result from this starting time.
             stop: (dt.datetime | None): Filter result until this stopping time.
@@ -74,6 +61,17 @@ class MagData(object):
             MagData: An instance of the `MagData` class that contains the parsed
                 data stored in the file.  If `filename is None`, then an empty
                 `MagData` instance is returned.
+
+        Attributes:
+            df (pd.DataFrame): Dataframe containing the magnetometer data.  The index
+                is a datetime index and the columns are:
+                ['Bx', 'By', 'Bz', 'Brange', 'X', 'Y', 'Z', 'Bmag'] and optionally
+                ['R', 'LT', 'Latitude', 'Br', 'Btheta', 'Bphi'] if spherical
+                coordinates are calculated.
+            coordsystem (str): Coordinate system of the data.  Default is 'JUNO_JSS'.
+            filename (Path | None): Path to the data file associated with this instance
+            origin (str): Origin of the coordinate system in SPICE terminology.
+                Default is 'JUPITER'.
         """
         if filename:
             logging.info(f"Reading mag file - {filename}")
@@ -135,7 +133,7 @@ class MagData(object):
         """
         Parse magnetometer file into a pandas dataframe.
         """
-        logging.info(f"Parsing ASCII mag file - {self.filename}")
+        logging.info(f"Parsing ASCII mag file - {str(self.filename)}")
         nheader = self._count_header_lines()
 
         self.df: pd.DataFrame = pd.read_csv(
@@ -170,10 +168,13 @@ class MagData(object):
         instance to HDF5.  The original ASCII file will be deleted.
         """
         logging.info(f"Converting file to HDF - {self.filename}")
-        assert ".sts" in self.filename
-        self.df.to_hdf(self.filename[:-4] + ".hdf5", key="data")
-        os.remove(self.filename)
-        self.filename = self.filename[:-4] + ".hdf5"
+
+        assert self.filename.suffix == ".sts"
+
+        hdf5_filename = self.filename.with_suffix(".hdf5")
+        self.df.to_hdf(hdf5_filename, key="data")
+        self.filename.unlink()
+        self.filename = hdf5_filename
 
     def convert_to_spherical(self, use_mag_coords: bool = False):
         """
@@ -249,7 +250,7 @@ class MagData(object):
             assert isinstance(et, float)
 
             # Origin offset between the two coordinate systems
-            origin_offset = spiceypy.spkpos(
+            origin_offset, _ = spiceypy.spkpos(
                 new_origin, et, self.coordsystem, "NONE", self.origin
             )
 
@@ -264,31 +265,16 @@ class MagData(object):
             pos_rotated = np.matmul(rotation_matrix, pos)
             b_rotated = np.matmul(rotation_matrix, b_prev)
 
-            return b_rotated, pos_rotated
+            return tuple(b_rotated) + tuple(pos_rotated)
 
         _t = self.df.apply(_convert, axis=1, result_type="expand")
 
         try:
-            (
-                self.df["Bx"],
-                self.df["By"],
-                self.df["Bz"],
-                self.df["X"],
-                self.df["Y"],
-                self.df["Z"],
-            ) = (
-                _t[0],
-                _t[1],
-                _t[2],
-                _t[3],
-                _t[4],
-                _t[5],
-            )
-
-        except KeyError:
+            self.df.loc[:, ["Bx", "By", "Bz", "X", "Y", "Z"]] = _t.values
+        except Exception:
             print(_t)
             print(self.filename)
-            raise Exception()
+            raise
 
         self.coordsystem = out_coordsystem
         self.origin = new_origin
@@ -303,7 +289,9 @@ class MagData(object):
         """
         self.df["alpha"] = np.arctan2(self.df["Bphi"], self.df["Br"]) * 180 / np.pi
 
-    def plot(self, vars: list[str], axs: list[axes.Axes], color: Any = "k"):
+    def plot(
+        self, vars: list[str], axs: list[axes.Axes], color: Any = "k", **kwargs
+    ) -> list[axes.Axes]:
         """
         Plot magnetometer data. Modifies and returns an axes object.
 
@@ -313,6 +301,7 @@ class MagData(object):
             axs (list[mpl.axes.Axes]: `matplotlib` axes on which the variables
                 are to be plotted.
             color (Any): Color used for plotting the data.
+            **kwargs: Additional keyword arguments passed to `ax.plot`.
 
         Returns:
             mpl.axes.Axes: The axes objects are modified and returned.
@@ -332,7 +321,7 @@ class MagData(object):
             var_string.update({"alpha": r"$\alpha"})
 
         for i, ax in enumerate(axs):
-            ax.plot(self.df.index, self.df[vars[i]], color=color, lw=0.75)
+            ax.plot(self.df.index, self.df.loc[:, vars[i]], color=color, **kwargs)
             ax.grid(which="both", lw="0.5", ls="dotted")
 
             _, _, ymin, ymax = ax.axis()
@@ -410,7 +399,7 @@ def get_mag_data(
     for f in files:
         if f.exists():
             logging.info("Converting to HDF5 file ...")
-            _ = MagData(filename=str(f), is_hdf=False)
+            _ = MagData(filename=f, is_hdf=False)
         elif not f.with_suffix(".hdf5").exists():
             logging.error("Magnetometer file missing. Use do_download=True")
 
@@ -440,6 +429,10 @@ def load_mag_data(
         coord_system (str | None): Coordinate system for resulting data.
         sid (str): SID corresponding to the data file, see Usage>Magnetometer
             for different options.
+
+    Returns:
+        MagData: An instance of the `MagData` class that contains the merged
+            data between the start and stop times.
     """
     files = get_mag_data(
         start,

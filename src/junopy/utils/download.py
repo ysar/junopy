@@ -18,6 +18,7 @@ Contains methods to download files.  This is a more lower-level method that
 what most users need.  If you need to download data files, using the
 appropriate `IndexFile` class is much better.
 """
+
 import urllib.request
 import urllib.error
 import uuid
@@ -120,9 +121,9 @@ def download_multiple_files(
     from threading import Thread
 
     assert len(urls) > 0, "URL list cannot be empty"
-    assert len(urls) == len(
-        output_files
-    ), "URLs and output file name lists must have the same length"
+    assert len(urls) == len(output_files), (
+        "URLs and output file name lists must have the same length"
+    )
 
     def download_wrapper(url, fOut):
         try:

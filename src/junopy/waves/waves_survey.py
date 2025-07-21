@@ -1,13 +1,16 @@
+# Copyright (c) 2018 Yash Sarkango
+# Licensed under the MIT License
+
 import numpy as np
 import pandas as pd
 import datetime as dt
-import glob
-import matplotlib as mpl
 import matplotlib.colors as colors
+import logging
 
+from pathlib import Path
+from matplotlib import axes
 from typing import Optional
 
-from junopy import config
 from junopy import index
 
 
@@ -16,9 +19,10 @@ class WavesSurveyData(object):
         self,
         start: Optional[dt.datetime] = None,
         stop: Optional[dt.datetime] = None,
-        filename: Optional[str] = None,
+        filename: Optional[Path] = None,
         freq_low: Optional[float] = None,
         freq_high: Optional[float] = None,
+        is_hdf: bool = False,
     ):
         """
         Class to parse data from the Waves instrument.
@@ -26,13 +30,19 @@ class WavesSurveyData(object):
         Args:
             start (dt.datetime | None): Start time for observations.
             stop (dt.datetime | None): Stop time for observations.
-            filename (str | None): Name of the data file to be read.
+            filename (Path | None): Name of the data file to be read.
             freq_low (float | None): Lower frequency limit for analysis in Hz.
             freq_high (float | None): Upper frequency limit for analysis in Hz.
+            is_hdf (bool): True if the data file is an HDF5 file.
         """
         if filename:
-            self.filename = filename
-            self.parse_waves_file()
+            logging.info(f"Reading Waves file - {str(filename)}")
+            if is_hdf:
+                self.read_hdf5_file(filename)
+            else:
+                self.filename = filename
+                self._parse_waves_file()
+                self._convert_to_hdf()
 
         if start and stop:
             self.df = self.df.loc[
@@ -45,10 +55,10 @@ class WavesSurveyData(object):
         if freq_high:
             self.channels = self.channels[self.channels["freq"] <= freq_high]
 
-    def parse_waves_file(self):
+    def _parse_waves_file(self):
         """
         Parse a Waves-survey file.
-        2 lines contain nonsense. Well not nonsense, but not useful.
+        2 lines can be ignored.
         3rd line contains channel names.
         4th line contains channel frequency centers.
         5th line contains channel bandwidths.
@@ -103,6 +113,43 @@ class WavesSurveyData(object):
         self.df.set_index(["time"], inplace=True)
         self.df.drop(inplace=True, columns=["SCET", "SCLK (sec)"])
 
+    def _convert_to_hdf(self):
+        """
+        Store all attributes of the WavesSurveyData class into an HDF5 file.
+        DataFrames are stored as datasets, scalars/strings as metadata.
+        """
+        hdf_file = self.filename.with_suffix(".hdf5")
+        with pd.HDFStore(hdf_file, mode="w") as store:
+            # Store the main dataframe
+            store.put("df", self.df)
+            # Store the channels dataframe if it exists
+            if hasattr(self, "channels") and isinstance(self.channels, pd.DataFrame):
+                store.put("channels", self.channels)
+            # Store scalar/string attributes as metadata on the main dataset
+            attrs = ["yvar", "units", "cbarlabel", "filename"]
+            for attr in attrs:
+                if hasattr(self, attr):
+                    store.get_storer("df").attrs[attr] = getattr(self, attr)
+        # Remove the original file and update filename
+        self.filename.unlink()
+        self.filename = hdf_file
+
+    def read_hdf5_file(self, filename: Path) -> None:
+        """
+        Load all attributes from an HDF5 file into this WavesSurveyData instance.
+        """
+        with pd.HDFStore(filename, mode="r") as store:
+            self.df = store["df"]
+            self.channels = store["channels"] if "channels" in store else None
+            attrs = store.get_storer("df").attrs
+            self.filename = filename
+            if hasattr(attrs, "yvar"):
+                self.yvar = attrs.yvar
+            if hasattr(attrs, "units"):
+                self.units = attrs.units
+            if hasattr(attrs, "cbarlabel"):
+                self.cbarlabel = attrs.cbarlabel
+
     def limit_freq(self, lower: float, upper: float) -> None:
         """
         Limit the frequency range of the data to the specified lower and upper bounds.
@@ -117,9 +164,9 @@ class WavesSurveyData(object):
 
     def plot(
         self,
-        ax: mpl.Axes,
-        freq_low: float = 5e1,
-        freq_high: float = 20e3,
+        ax: axes.Axes,
+        freq_low: float | None = None,
+        freq_high: float | None = None,
         vmin: float | None = None,
         vmax: float | None = None,
         use_log_scale: bool = True,
@@ -140,9 +187,15 @@ class WavesSurveyData(object):
             **kwargs: Other arguments to pass to [plt.pcolormesh][]
         """
 
-        channels = self.channels[
-            (self.channels["freq"] <= freq_high) & (self.channels["freq"] > freq_low)
-        ]
+        valid_channels = np.ones(len(self.channels), dtype=bool)
+
+        if freq_low:
+            valid_channels &= self.channels["freq"] >= freq_low
+
+        if freq_high:
+            valid_channels &= self.channels["freq"] <= freq_high
+
+        channels = self.channels[valid_channels]
 
         timearray = self.df.index.to_pydatetime()
 
@@ -154,7 +207,7 @@ class WavesSurveyData(object):
         ybins = []
 
         for freq, bw in zip(channels["freq"], channels["bandwidth"]):
-            ybins.extend([freq - bw, freq + bw])
+            ybins.extend([freq - bw / 2, freq + bw / 2])
 
         ybins = np.asarray(ybins)
 
@@ -170,13 +223,11 @@ class WavesSurveyData(object):
             timearray, ybins, c, norm=colors.LogNorm(vmin=vmin, vmax=vmax), **kwargs
         )
 
-        if use_log_scale:
+        if freq_low and freq_high:
             ax.set_ylim([freq_low, freq_high])
+
+        if use_log_scale:
             ax.set_yscale("log")
-            ax.set_yticks([1e2, 1e3, 1e4])
-        else:
-            ax.set_ylim([100, 1500])
-            ax.set_yticks([500, 1000, 1500])
 
         ax.set_ylabel(self.yvar + self.units)
 
@@ -213,27 +264,33 @@ def get_waves_data_for_date(
         magnetic_spectra (WavesSurveyData | None): The magnetic field spectra.
     """
 
-    data_folder = config.ConfigVars.get("WAVES_SURVEY_DATA_DIR")
-    waves_files = glob.glob(data_folder + "/*{:s}*.CSV".format(date.strftime("%Y%j")))
+    # data_folder = config.ConfigVars.get("WAVES_SURVEY_DATA_DIR")
 
-    if len(waves_files) != 2:
-        waves_index = index.IndexFile(dataset="waves-survey")
-        _ = waves_index.get_files_between_dates(
-            start, stop, do_download=True, sid="SURVEY"
-        )
+    if not start:
+        start = dt.datetime(date.year, date.month, date.day, 0, 0, 0, 1)
+    if not stop:
+        stop = dt.datetime(date.year, date.month, date.day, 23, 59, 59, 99999)
 
-        waves_files = glob.glob(
-            data_folder + "/*{:s}*.CSV".format(date.strftime("%Y%j"))
-        )
+    waves_index = index.IndexFile(dataset="waves-survey", do_download=False)
+    waves_files = waves_index.get_files_between_dates(
+        start, stop, do_download=True, sid="SURVEY"
+    )
 
-        # assert(len(wavesfiles) == 2)
+    waves_files = [
+        f.with_suffix(".hdf5") if f.with_suffix(".hdf5").exists() else f
+        for f in waves_files
+    ]
 
     for wfile in waves_files:
-        print("Reading Waves file - {:s}".format(wfile))
-        if "_E_" in wfile:
-            waves_psd_electric = WavesSurveyData(filename=wfile, start=start, stop=stop)
+        is_hdf = wfile.suffix.lower() == ".hdf5"
+        if "_E_" in str(wfile):
+            waves_psd_electric = WavesSurveyData(
+                filename=wfile, start=start, stop=stop, is_hdf=is_hdf
+            )
         else:
-            waves_psd_magnetic = WavesSurveyData(filename=wfile, start=start, stop=stop)
+            waves_psd_magnetic = WavesSurveyData(
+                filename=wfile, start=start, stop=stop, is_hdf=is_hdf
+            )
 
     return waves_psd_electric, waves_psd_magnetic
 

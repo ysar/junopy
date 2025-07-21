@@ -26,26 +26,41 @@ def test_download_indexfiles():
     assert index_waves_survey.index_file.exists()
 
 
-# def test_parse_indexfile():
-#     """
-#     Test to parse index file.
-#     """
-#     st = dt.datetime(2018, 1, 11, 0, 40)
-#     et = dt.datetime(2018, 1, 15, 1, 23)
+def test_parse_mag_indexfile():
+    """
+    Test to parse magnetometer index file.
+    """
+    st = dt.datetime(2020, 1, 1)
+    et = dt.datetime(2020, 1, 1, 1)
 
-#     magindex = IndexFile(dataset='mag')
+    mag_index = index.IndexFile(dataset='mag')
 
-#     filelist = magindex.get_files_between_dates(
-#         st, et, sid='PC 1 SECOND')
+    received = mag_index.get_files_between_dates(st, et, sid='PC 1 SECOND')
 
-#     filelist_check = [
-#         'DATA/JUPITER/PC/PERI-10/fgm_jno_l3_2018012pc_r1s_v01.lbl',
-#         'DATA/JUPITER/PC/PERI-11/fgm_jno_l3_2018013pc_r1s_v01.lbl',
-#         'DATA/JUPITER/PC/PERI-11/fgm_jno_l3_2018014pc_r1s_v01.lbl',
-#     ]
+    expected = [
+        Path('.junodata/data/mag/2020/001/fgm_jno_l3_2020001pc_r1s_v01.sts').absolute(),
+    ]
 
-#     assert(x in filelist_check for x in filelist)
+    assert set(received) == set(expected)
 
+
+def test_parse_wavessurvey_indexfile():
+    """
+    Test to parse waves survey index file.
+    """
+    st = dt.datetime(2020, 1, 1, 2)
+    et = dt.datetime(2020, 1, 1, 23)
+
+    waves_index = index.IndexFile(dataset='waves-survey')
+
+    received = waves_index.get_files_between_dates(st, et)
+
+    expected = [
+        Path('.junodata/data/waves-survey/2020/001/WAV_2020001T000000_B_V02.CSV').absolute(),
+        Path('.junodata/data/waves-survey/2020/001/WAV_2020001T000000_E_V02.CSV').absolute(),
+    ]
+
+    assert set(received) == set(expected)
 
 # def test_download_list_files():
 #     """

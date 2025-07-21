@@ -30,8 +30,6 @@ filelist = magIndex.get_files_between_dates(
     sid='SS 1 SECOND'
     do_download=True,
     do_parallel=True,
-    outfolder='data/mag',
-    get_label=True
 )
 ```
 

@@ -1,19 +1,7 @@
-# junopy - A Python API for the Juno spacecraft's particle and fields datasets.
-# Copyright (C) 2018  Yash Sarkango
-
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+# Copyright (c) 2018 Yash Sarkango
+# Licensed under the MIT License
 """Module to work with INDEX.TAB files present in the PDS3 archive."""
+
 import logging
 import pandas as pd
 from pathlib import Path
@@ -102,13 +90,15 @@ class IndexFile:
         try:
             df = pd.read_csv(
                 self.index_file,
-                sep="\t",  # PDS index files are typically tab-separated
                 names=columns,
                 parse_dates=["START_TIME", "STOP_TIME"],
                 date_format=TIME_FORMATS[self.dataset],
                 skiprows=1,
-                dtype=str,
             )
+
+            df["START_TIME"] = pd.to_datetime(df["START_TIME"])
+            df["STOP_TIME"] = pd.to_datetime(df["STOP_TIME"])
+
             return df
         except Exception as e:
             raise RuntimeError(f"Failed to parse index file: {e}")
@@ -152,12 +142,21 @@ class IndexFile:
 
         if self.dataset == "waves-survey":
             for s in ["BINT", "BUNC", "EINT", "EUNC"]:
-                mask &= not self.df["PRODUCT_ID"].str.contains(s)
+                mask &= ~(self.df["PRODUCT_ID"].str.contains(s))
 
-        df_filtered = self.df[
-            mask, ["FILE_SPECIFICATION_NAME", "START_TIME", "STOP_TIME"]
+        df_filtered = self.df.loc[
+            mask,
+            [
+                "FILE_SPECIFICATION_NAME",
+                "START_TIME",
+                "STOP_TIME",
+                "PRODUCT_LABEL_MD5CHECKSUM",
+            ],
         ]
         assert isinstance(df_filtered, pd.DataFrame)
+
+        # Remove duplicate entries by using the MD5 checksum
+        df_filtered.drop_duplicates(subset="PRODUCT_LABEL_MD5CHECKSUM", inplace=True)
 
         # Prepare file lists
         data_dir = config.ConfigVars.get("DATA_DIR") / self.dataset
@@ -174,7 +173,7 @@ class IndexFile:
             file_path = (
                 data_dir
                 / row.START_TIME.strftime("%Y")
-                / row.STOP_TIME.strftime("%j")
+                / row.START_TIME.strftime("%j")
                 / file_url.split("/")[-1]
             )
 

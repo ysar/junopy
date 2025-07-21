@@ -16,6 +16,7 @@
 """
 Some functions for speed-energy conversions, coordinate conversions, etc.
 """
+
 import numpy as np
 from scipy.constants import speed_of_light, m_e
 

@@ -1,3 +1,32 @@
+import datetime as dt
+import numpy as np
+from junopy import mag
+from junopy import waves
+
+def test_parse_mag():
+    """
+    Test to parse a magnetometer file.
+    """
+    start = dt.datetime(2020, 1, 1, 2)
+    stop = dt.datetime(2020, 1, 1, 23)
+
+    mag_data = mag.load_mag_data(start, stop, coordsystem="JUNO_JSS")
+    assert np.isclose(mag_data.df['Bx'].iloc[0], 9.46) 
+    assert np.isclose(mag_data.df['Btheta'].iloc[0], 2.11828) 
+
+def test_parse_wavessurvey():
+    """
+    Test to parse a waves-survey data file.
+    """
+    start = dt.datetime(2020, 1, 1, 2)
+    _ = dt.datetime(2020, 1, 1, 23)
+
+    electric_spectra, magnetic_spectra = waves.get_waves_data_for_date(date=start.date()) 
+    assert np.isclose(electric_spectra.channels['freq'][1], 97.656)
+    assert np.isclose(magnetic_spectra.channels['freq'][1], 97.656)
+    assert np.isclose(electric_spectra.df['HFR_HI_30'].iloc[0], 1.0865e-13) 
+    assert np.isclose(magnetic_spectra.df['LFR_LO_B_01'].iloc[0], 2.6888e-06) 
+
 
 # import os
 # import test_index

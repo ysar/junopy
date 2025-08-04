@@ -44,7 +44,7 @@ def open_file(filename: Path, *args):
         filename (str): The name of the file to open.
         *args: Additional arguments to pass to the open function.
     """
-    if ".gz" == filename[-3:]:
+    if filename.suffix == ".gz":
         return igzip.open(filename, *args)
     else:
         return open(filename, *args)
@@ -108,6 +108,15 @@ class JadeBinaryData(object):
             provided, all data is read.
         stop (dt.datetime, optional): Stop time for slicing the data. If not
             provided, all data is read.
+
+    Attributes:
+        times (pd.DatetimeIndex): Index of the DataFrame containing the times
+            of the measurements.
+        data_by_packetid (dict[int, pd.DataFrame]): Dictionary with keys as
+            packet IDs and values as DataFrames containing the data for that
+            packet ID.
+        packetids (list[int]): List of packet IDs present in the data.
+        filename (Path): Path to the .DAT or .DAT.gz file being read.
     """
 
     def __init__(
@@ -128,6 +137,7 @@ class JadeBinaryData(object):
         self.times = df.index
 
         self.data_by_packetid = JadeBinaryData.separate_packetids(df)
+        self.packetids = [int(x) for x in self.data_by_packetid.keys()]
 
     @staticmethod
     def read_jade_binary_file(file_path: Path) -> pd.DataFrame:
@@ -239,7 +249,9 @@ class JadeBinaryData(object):
     @staticmethod
     def separate_packetids(df: pd.DataFrame) -> dict[int, pd.DataFrame]:
         """
-        Here we separate the data for different packet IDs.
+        Here we separate the data for different packet IDs. 
+
+        ```md
         |-----------|--------------------------|
         | PacketIds | Data                     |
         |-----------|--------------------------|
@@ -251,6 +263,7 @@ class JadeBinaryData(object):
         | 105       | Ion TOF high-rate        |
         | 121       | Ion TOF low-rate         |
         |-----------|--------------------------|
+        ```
 
         Args:
             df (pandas.DataFrame): DataFrame containing the entire JADE level-3 data.

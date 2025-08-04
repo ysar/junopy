@@ -6,11 +6,9 @@ spacecraft.  It uses data from the Planetary
 Plasma Interactions ([PPI](https://pds-ppi.igpp.ucla.edu/)) 
 node of the Planetary Data System ([PDS](https://pds.nasa.gov/)).  
 
-The beginnings of what became `junopy` dates to around 2018, 
-when Juno data was relatively new.
-At the time, Juno data was stored on the PDS-PPI node in a PDS3-compliant format.  
-Since then, the PDS has been encouraging space missions to upgrade to the newer
-PDS4 format.  Despite this directive, for now `junopy` continues to
+Juno data was originally stored on the PDS-PPI node in a PDS3-compliant archive.  
+However, PDS has been encouraging space missions to upgrade to the newer
+PDS4 archive.  Despite this directive, for now `junopy` continues to
 use the PDS3 structure.  Practically all functionality related to searching for
 and downloading data relies on `INDEX.TAB` files that were present in every
 PDS3 archive.  Eventually, if there is interest from the community and if the PDS 
@@ -25,7 +23,8 @@ Although unaffiliated, this tool has benefited greatly from
 conversations with many people on the Juno mission and instrument teams.  Thank
 you all and hope this is of some use!
 
--- Yash Sarkango ([sarkango@umn.edu](mailto:sarkango@umn.eduu))
+## Contributors:
+Yash Sarkango ([sarkango@umn.edu](mailto:sarkango@umn.eduu))
 
 ## FAQs
 

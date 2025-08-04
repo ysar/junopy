@@ -154,7 +154,7 @@ def download_multiple_files(
             flush=True,
         )
 
-    print(" ... Download complete.")
+    print("\n ... Download complete.")
 
     # Check if all files are present.
     success = True

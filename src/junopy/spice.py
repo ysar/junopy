@@ -13,6 +13,7 @@ import urllib.request
 import logging
 from typing import Sequence
 from contextlib import ContextDecorator
+from pathlib import Path
 
 from junopy import config
 from junopy import utils
@@ -79,7 +80,7 @@ def _split_string_for_spiceypy(input_string: str) -> str:
     """
     string_len = 70
 
-    if len(input_string) < string_len:
+    if len(input_string) <= string_len:
         return "'" + input_string + "',\n"
 
     output_string = ""
@@ -149,9 +150,14 @@ def identify_juno_kernels() -> list[str]:
     return kernel_urls
 
 
-def download_juno_kernels():
+def download_juno_kernels(do_download: bool = True) -> None:
     """
     Downloads all relevant Juno related SPICE kernels into the SPICE_DIR directory.
+
+    Args:
+        do_download (bool): If True, forces download of Juno kernels even if
+            they already exist. If False, only checks for existing kernels,
+            updates the meta kernel file and does not download anything.
     """
 
     spice_dir = config.ConfigVars.get("SPICE_DIR")
@@ -163,21 +169,24 @@ def download_juno_kernels():
     output_folder.mkdir(parents=True, exist_ok=True)
 
     # Filter out existing files to avoid re-downloading
-    kernel_urls = [
+    kernels_to_download = [
         url for url in kernel_urls if not (output_folder / url.split("/")[-1]).exists()
     ]
 
     output_files = [
         output_folder / url.split("/")[-1]
-        for url in kernel_urls
+        for url in kernels_to_download
         if not (output_folder / url.split("/")[-1]).exists()
     ]
 
-    if len(kernel_urls) == 0:
-        logging.info("All Juno SPICE kernels are already downloaded.")
-        return
+    if do_download and len(kernels_to_download) > 0:
+        utils.download.download_multiple_files(
+            kernels_to_download, output_files=output_files
+        )
+    else:
+        logging.info("No new kernels to download")
 
-    utils.download.download_multiple_files(kernel_urls, output_files=output_files)
+    logging.info("Remaking the meta kernel file ...")
     _remake_meta_kernel_file(kernel_urls)
 
 
@@ -189,6 +198,9 @@ def _remake_meta_kernel_file(kernel_urls: list[str]) -> None:
         kernels_urls (list[str]): List of kernel URLs to be downloaded/used.
     """
     spice_dir = config.ConfigVars.get("SPICE_DIR")
+
+    custom_frame_file = _create_custom_frame_file()
+
     logging.info("Creating Meta Kernel file ...")
     metafile = spice_dir / "JunoMetaKernel.txt"
 
@@ -198,10 +210,47 @@ def _remake_meta_kernel_file(kernel_urls: list[str]) -> None:
         kernel_name = str((spice_dir / "kernels" / kernel.split("/")[-1]).absolute())
         buffer += _split_string_for_spiceypy(kernel_name)
 
+    buffer += _split_string_for_spiceypy(str(custom_frame_file.absolute()))
     buffer += ")\n\\begintext\n"
 
     with open(metafile, "w") as f:
         f.write(buffer)
+
+
+def _create_custom_frame_file() -> Path:
+    """
+    This is a hack to add frame definitions to the SPICE kernel directory that
+    are not included in the Juno SPICE kernels.  This is necessary for some of
+    the coordinate systems used in the JADE data.
+    """
+    spice_dir = config.ConfigVars.get("SPICE_DIR")
+    custom_frame_file = spice_dir / "kernels" / "_custom_frames.tf"
+
+    with open(custom_frame_file, "w") as f:
+        f.write(r"""
+        \begindata
+            FRAME_JUNO_JADE_DESPUN         = -61951
+            FRAME_-61951_NAME              = 'JUNO_JADE_DESPUN'
+            FRAME_-61951_CLASS             = 5
+            FRAME_-61951_CLASS_ID          = -61951
+            FRAME_-61951_CENTER            = -61
+            FRAME_-61951_RELATIVE          = 'J2000'
+            FRAME_-61951_DEF_STYLE         = 'PARAMETERIZED'
+            FRAME_-61951_FAMILY            = 'TWO-VECTOR'
+            FRAME_-61951_PRI_AXIS          = 'Z'
+            FRAME_-61951_PRI_VECTOR_DEF    = 'CONSTANT'
+            FRAME_-61951_PRI_FRAME         = 'JUNO_SPACECRAFT'
+            FRAME_-61951_PRI_SPEC          = 'RECTANGULAR'
+            FRAME_-61951_PRI_VECTOR        = ( 0, 0, 1 )
+            FRAME_-61951_SEC_AXIS          = 'X'
+            FRAME_-61951_SEC_VECTOR_DEF    = 'CONSTANT'
+            FRAME_-61951_SEC_FRAME         = 'ECLIPJ2000'
+            FRAME_-61951_SEC_SPEC          = 'RECTANGULAR'
+            FRAME_-61951_SEC_VECTOR        = ( 0, 0, 1 )
+        \begintext
+        """)
+
+    return custom_frame_file
 
 
 @withspiceloaded()

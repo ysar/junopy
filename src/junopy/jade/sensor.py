@@ -7,9 +7,9 @@ import datetime as dt
 from copy import deepcopy
 from scipy.constants import m_e, e
 
-from JunoPy import mag
 from .read import JadeBinaryData
 from . import calib
+from .. import mag
 
 
 def _create_energy_bins(energies: np.ndarray) -> np.ndarray:
@@ -90,7 +90,7 @@ class SensorData(object):
         energies = self.data_raw["DIM1_E"]
         times = self.times
 
-        sensor_const = calib._get_sensor_constants(sensorId=self.id)
+        sensor_const = calib._get_sensor_constants(self.id)
 
         if is_high_res:
             _F = calib._calc_anode_correction_F(sensor_const)[
@@ -152,6 +152,12 @@ class SensorData(object):
 
         to_convert = ["DATA", "DATA_SIGMA", "BACKGROUND", "BACKGROUND_SIGMA"]
 
+        if self.geom_factor_eff is None:
+            raise ValueError(
+                "Geometric factor not calculated."
+                "Call calc_geometric_factor_electrons() or calc_geometric_factor_ion() first."
+            )
+
         if "countrate" in units_in:
             assert (self.data_raw["DATA_UNITS"] == 2).all()
             if "def" in units_out:
@@ -199,7 +205,7 @@ class SensorData(object):
             Bz = magvector[2, :] / Bmag
 
         else:
-            magdata = mag.get_mag_data(
+            magdata = mag.load_mag_data(
                 self.times[0], self.times[-1], coordsystem="Juno_JADE_despun"
             ).df.loc[:, ["Bx", "By", "Bz", "Bmag"]]
 
@@ -331,7 +337,6 @@ class SensorData(object):
         Args:
             weigh_solid_angle (bool): Whether to weigh the pitch angle bins by
                 their solid angle. If False, all pitch angle bins are weighed equally.
-                (YS Note: Don't remember why I added this option ...)
         """
         pitchangle_bins = self.pitchangle_bins
 
@@ -460,7 +465,7 @@ class SensorData(object):
 
         try:
             x.energy_spectra = x.energy_spectra.iloc[indices].copy()
-            x.pitchAngleSpectra = x.pitchAngleSpectra.iloc[indices, :].copy()
+            x.pitchangle_spectra = x.pitchangle_spectra.iloc[indices, :].copy()
         except AttributeError:
             pass
 

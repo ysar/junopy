@@ -11,21 +11,28 @@ nav:
       - Release Notes: about/release-notes.md
       - Contributing: about/contributing.md
       
-  - Usage:
-      - Magnetometer: modules/magnetometer.md
-      - Waves: modules/waves.md
-      - JEDI: modules/jedi.md
-      - JADE: modules/jade.md
-      - Auxiliary: modules/auxiliary.md
+  - Examples:
+    - examples/1_indexfile.ipynb
+    - examples/2_download_data.ipynb
+    - examples/3_spice.ipynb
+    - examples/4_mag_data.ipynb
+    - examples/5_waves_survey.ipynb
+    - examples/jedi_data.ipynb
+    - examples/jade_data.ipynb
   - API Reference:
       - api/index.md
+      - config: api/config.md
       - index: api/indexfiles.md
       - spice: api/spice.md
       - mag: api/mag.md
       - waves: api/waves.md
       - jedi: api/jedi.md
-      - jade: api/jade.md
-      - config: api/config.md
+      - jade:
+        - jade.get: api/jade/get.md
+        - jade.read: api/jade/read.md
+        - jade.sensor: api/jade/sensor.md
+        - jade.plot: api/jade/plot.md
+        - jade.calib: api/jade/calib.md
       - utils:
           - utils.download: api/utils/download.md
           - utils.compression: api/utils/compression.md
@@ -101,6 +108,7 @@ plugins:
             show_symbol_type_toc: true
             signature_crossrefs: true
             summary: true
+  - mkdocs-jupyter
 
 # markdown-extensions:
 #   - smarty

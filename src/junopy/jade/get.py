@@ -5,7 +5,6 @@ import pandas as pd
 import glob
 
 from pathlib import Path
-from JunoPy import config
 
 PATTERNS = {
     "ELECTRONS": "S_ELC_",
@@ -15,7 +14,7 @@ PATTERNS = {
 }
 
 
-def get_jade_data_files(
+def find_jade_data_files(
     start: dt.datetime,
     stop: dt.datetime,
     get_hrs: bool = True,
@@ -37,29 +36,34 @@ def get_jade_data_files(
     Returns:
         list of Path: List of file paths matching criteria.
     """
-    if datatype not in PATTERNS:
-        raise ValueError(
-            f"Invalid datatype for JADE '{datatype}'. Must be one of {list(PATTERNS.keys())}."
-        )
+    pass
+    # if datatype not in PATTERNS:
+    #     raise ValueError(
+    #         f"Invalid datatype for JADE '{datatype}'. Must be one of {list(PATTERNS.keys())}."
+    #     )
 
-    relevant_files = []
-    for day in pd.date_range(start, stop):
-        relevant_files += glob.glob(
-            config.ConfigVars.get("JADE_DATA_DIR")
-            + day.strftime("/%Y/%j/")
-            + f"*{PATTERNS[datatype]}*.DAT*"
-        )
+    # sid = PATTERNS[datatype]
 
-        if not get_lrs:
-            relevant_files = [
-                f for f in relevant_files if "_LRS" not in f and "_LLS" not in f
-            ]
+    # # Download files that are missing
 
-        if not get_hrs:
-            relevant_files = [
-                f for f in relevant_files if "_HRS" not in f and "_HLS" not in f
-            ]
+    # relevant_files = []
+    # for day in pd.date_range(start, stop):
+    #     relevant_files += glob.glob(
+    #         config.ConfigVars.get("JADE_DATA_DIR")
+    #         + day.strftime("/%Y/%j/")
+    #         + f"*{PATTERNS[datatype]}*.DAT*"
+    #     )
 
-    relevant_files = [Path(f) for f in relevant_files]
+    #     if not get_lrs:
+    #         relevant_files = [
+    #             f for f in relevant_files if "_LRS" not in f and "_LLS" not in f
+    #         ]
 
-    return relevant_files
+    #     if not get_hrs:
+    #         relevant_files = [
+    #             f for f in relevant_files if "_HRS" not in f and "_HLS" not in f
+    #         ]
+
+    # relevant_files = [Path(f) for f in relevant_files]
+
+    # return relevant_files

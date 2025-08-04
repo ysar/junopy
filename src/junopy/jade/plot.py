@@ -24,6 +24,20 @@ def plot_timeseries_spectra(
 ) -> tuple[mpl.axes.Axes, mpl.collections.QuadMesh]:
     """
     Plot a time series of spectra from a dataframe.
+
+    Args:
+        df_spectra (pd.DataFrame): DataFrame containing spectral data with time as index.
+        bins (np.ndarray): Array of spectral bins.
+        ax (mpl.axes.Axes): Matplotlib axes to plot on.
+        vmin (float | None): Minimum value for color normalization.
+        vmax (float | None): Maximum value for color normalization.
+        cmap (str): Colormap to use for the plot.
+        zorder (int): Z-order for the plot.
+        show_colorbar (bool): Whether to show the colorbar.
+        cbar_label (str | None): Label for the colorbar.
+
+    Returns:
+        tuple: Tuple containing the axes and the QuadMesh object.
     """
     # x data is time bins
     times = df_spectra.index.to_pydatetime()
@@ -36,10 +50,10 @@ def plot_timeseries_spectra(
     # z data are spectral values
     z = df_spectra.values.T
 
-    # Correct for non-contigous data.
-    for i in range(len(times)):
-        if (time_bins[i + 1] - time_bins[i]).total_seconds() > 301:
-            z[:, i] = np.nan
+    # # Correct for non-contigous data.
+    # for i in range(len(times)):
+    #     if (time_bins[i + 1] - time_bins[i]).total_seconds() > 301:
+    #         z[:, i] = np.nan
 
     if not vmin and not vmax:
 
@@ -82,6 +96,20 @@ def plot_energy_pa_spectra(
 ) -> tuple[mpl.axes.Axes, mpl.collections.QuadMesh]:
     """
     Plot a pitch angle vs energy spectrogram from JADE sensor data.
+
+    Args:
+        ax (mpl.axes.Axes): Matplotlib axes to plot on.
+        sensor_data (SensorData): JADE sensor data containing energy and pitch angle bins.
+        start (dt.datetime | None): Start time for filtering data.
+        stop (dt.datetime | None): Stop time for filtering data.
+        normalize_energy_bins (bool): Whether to normalize energy bins.
+        cmap (str): Colormap to use for the plot.
+        show_colorbar (bool): Whether to show the colorbar.
+        vmin (float | None): Minimum value for color normalization.
+        vmax (float | None): Maximum value for color normalization.
+
+    Returns:
+        tuple: Tuple containing the axes and the QuadMesh object.
     """
     if start and stop:
         indices = (sensor_data.times >= start) & (sensor_data.times <= stop)
@@ -129,7 +157,7 @@ def plot_energy_pa_spectra(
 
 
 def plot_anode_energy_time_spectra(
-    axs: np.array[mpl.axes.Axes],
+    axs: list[mpl.axes.Axes],
     sensor_data: SensorData,
     data: str = "data",
     vmin: float | None = None,
@@ -138,9 +166,24 @@ def plot_anode_energy_time_spectra(
     zorder: int = 1,
     show_colorbar: bool = True,
     locator: mpl.ticker.Locator | None = None,
-):
+) -> tuple[list[mpl.axes.Axes], mpl.cm.ScalarMappable]:
     """
-    Plot JADE anode energy-time spectrograms.
+    Plot JADE energy-time spectrograms for each anode.
+
+    Args:
+        axs (np.array[mpl.axes.Axes]): Array of matplotlib axes to plot on.
+        sensor_data (SensorData): JADE sensor data containing energy and time bins.
+        data (str): Type of data to plot. Options are "data", "data+bg", "pitchangle", "s/n".
+        vmin (float | None): Minimum value for color normalization.
+        vmax (float | None): Maximum value for color normalization.
+        cmap (str): Colormap to use for the plot.
+        zorder (int): Z-order for the plot.
+        show_colorbar (bool): Whether to show the colorbar.
+        locator (mpl.ticker.Locator | None): Locator for x-axis ticks.
+
+    Returns:
+        tuple: Tuple containing the axes and the ScalarMappable object for
+            color normalization.
     """
     # x data is time bins
     times = sensor_data.times
@@ -180,16 +223,16 @@ def plot_anode_energy_time_spectra(
 
     for i in range(4):
         for j in range(4):
-            iAnode = 4 * i + j
+            i_anode = 4 * i + j
             axs[i, j].set_facecolor("0.7")
-            axs[i, j].pcolormesh(time_bins, y, d[iAnode, :, :], norm=norm, cmap=cmap)
+            axs[i, j].pcolormesh(time_bins, y, d[i_anode, :, :], norm=norm, cmap=cmap)
             axs[i, j].set_yscale("log")
             axs[i, j].set_xlabel("Time")
             axs[i, j].set_ylabel("Energy [eV]")
             axs[i, j].text(
                 0.1,
                 0.8,
-                f"Anode={iAnode}",
+                f"Anode={i_anode}",
                 backgroundcolor="w",
                 transform=axs[i, j].transAxes,
                 fontsize=7,

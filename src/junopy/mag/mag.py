@@ -358,17 +358,17 @@ def merge_magdata(m1: MagData, m2: MagData) -> MagData:
     return m3
 
 
-def get_mag_data(
+def find_mag_data(
     start: dt.datetime,
     stop: dt.datetime,
     do_download: bool = True,
     do_parallel: bool = False,
     sid: str = "SS 1 SECOND",
-) -> list[str]:
+) -> list[Path]:
     """
-    Downloads magnetometer data between certain start and stop times if the files
-    are not already present in the junopy root directory.  Regardless of whether
-    the files are downloaded or not, this function will convert the files to
+    Finds and downloads magnetometer data between certain start and stop times
+
+    This function will convert the files to
     HDF5 format if they are not already in that format.  This method returns a list
     of the relevant HDF5 files that were downloaded or converted or were already
     present.
@@ -378,8 +378,8 @@ def get_mag_data(
         stop (dt.datetime): Get data until this date-time.
         do_download (bool): Whether to download missing files.
         do_parallel (bool): Whether to download files in parallel.
-        sid (str): SID corresponding to the data file, see Usage>Magnetometer
-            for different options.
+        sid (str): SID corresponding to the data file options are "SS 1 SECOND",
+            "SS 1 MINUTE", "SUNSTATE", "PC 1 SECOND", "PC 1 MINUTE", etc.
 
     Returns:
         list[str]: List of relevant HDF5 files that were downloaded or converted
@@ -401,9 +401,9 @@ def get_mag_data(
             logging.info("Converting to HDF5 file ...")
             _ = MagData(filename=f, is_hdf=False)
         elif not f.with_suffix(".hdf5").exists():
-            logging.error("Magnetometer file missing. Use do_download=True")
+            logging.error("Magnetometer file missing. Try do_download=True")
 
-    files = [str(x.with_suffix(".hdf5")) for x in files]
+    files = [x.with_suffix(".hdf5") for x in files]
     return files
 
 
@@ -417,9 +417,12 @@ def load_mag_data(
 ) -> MagData:
     """
     Loads the magnetometer data into memory as a single `MagData` instance.
-    WARNING: This method will merge all the files that are within the start
-    and stop times, so it is not recommended to use this method if you need to
-    work with a large number of files or if the time range is too large.
+
+    Warning:
+        This method will merge all the files that are within the start
+        and stop times, so it is not recommended to use this method if you need to
+        work with a large number of files or if the time range is too large, as
+        you may have insufficient memory to hold the data.
 
     Args:
         start (dt.datetime): Load data starting from this date-time.
@@ -427,14 +430,14 @@ def load_mag_data(
         do_download (bool): Whether to download missing files.
         do_parallel (bool): Whether to download files in parallel.
         coord_system (str | None): Coordinate system for resulting data.
-        sid (str): SID corresponding to the data file, see Usage>Magnetometer
-            for different options.
+        sid (str): SID corresponding to the data file options are "SS 1 SECOND",
+            "SS 1 MINUTE", "SUNSTATE", "PC 1 SECOND", "PC 1 MINUTE", etc.
 
     Returns:
         MagData: An instance of the `MagData` class that contains the merged
             data between the start and stop times.
     """
-    files = get_mag_data(
+    files = find_mag_data(
         start,
         stop,
         do_download=do_download,

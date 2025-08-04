@@ -180,14 +180,20 @@ class IndexFile:
             file_urls.append(file_url)
             file_paths.append(file_path)
 
-        if not do_download:
-            return file_paths
-
-        # Download missing files
-        download_urls = []
-        download_paths = []
+        # Create list of requested label files.
         lbl_urls = []
         lbl_paths = []
+        if get_label:
+            for url, path in zip(file_urls, file_paths):
+                lbl_url = url[:-4] + ".LBL"
+                lbl_path = path.with_suffix(".LBL")
+                if not lbl_path.exists():
+                    lbl_urls.append(lbl_url)
+                    lbl_paths.append(lbl_path)
+
+        # Create list of requested data files.
+        download_urls = []
+        download_paths = []
 
         for url, path in zip(file_urls, file_paths):
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -206,17 +212,12 @@ class IndexFile:
             download_urls.append(url)
             download_paths.append(path)
 
-            # Handle LBL files if requested
-            if get_label and not path.with_suffix(".LBL").exists():
-                lbl_urls.append(url[:-4] + ".LBL")
-                lbl_paths.append(path.with_suffix(".LBL"))
-
         # Combine all downloads
         all_urls = download_urls + lbl_urls
         all_paths = download_paths + lbl_paths
 
-        if not all_urls:
-            logging.info("All files already exist. Nothing to download.")
+        if not all_urls or not do_download:
+            logging.info("Nothing to download.")
             return file_paths
 
         logging.info(f"Downloading {len(all_urls)} files...")

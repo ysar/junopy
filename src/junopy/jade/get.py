@@ -36,7 +36,7 @@ def find_jade_data_files(
     Returns:
         list of Path: List of file paths matching criteria.
     """
-    pass
+    raise Exception("This is unimplemented")
     # if datatype not in PATTERNS:
     #     raise ValueError(
     #         f"Invalid datatype for JADE '{datatype}'. Must be one of {list(PATTERNS.keys())}."

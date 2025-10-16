@@ -128,6 +128,8 @@ class SensorData(object):
         if self.id == 105 or self.id == 121:
             self.geom_factor_eff *= 12
 
+        self.geom_factor_eff *= 1e-4  # Convert from m2 to cm2
+
     def convert_units(
         self,
         units_in: str = "countrate",
@@ -234,8 +236,8 @@ class SensorData(object):
         self,
         min_energy: float | None = None,
         max_energy: float | None = None,
-        min_pitchangle: float | None = None,
-        max_pitchangle: float | None = None,
+        min_pitchangle: float = 0.,
+        max_pitchangle: float = 180.,
         num_pitchangle_bins: int = 12,
         add_background: bool = False,
     ):
@@ -249,8 +251,8 @@ class SensorData(object):
         Args:
             min_energy (float | None): Minimum energy to consider.
             max_energy (float | None): Maximum energy to consider.
-            min_pitchangle (float | None): Minimum pitch angle to consider.
-            max_pitchangle (float | None): Maximum pitch angle to consider.
+            min_pitchangle (float): Minimum pitch angle to consider (default=0.).
+            max_pitchangle (float): Maximum pitch angle to consider (default=180.).
             num_pitchangle_bins (int): Number of pitch angle bins.
             add_background (bool): Whether to add background data.
         """
@@ -281,6 +283,7 @@ class SensorData(object):
             condition *= _energies <= max_energy
 
         energies = energies[:, condition, :]
+        _energies = _energies[condition]
         data = data[:, condition, :]
         uncertainty = uncertainty[:, condition, :]
         pitchangles = pitchangles[:, condition, :]
@@ -288,7 +291,7 @@ class SensorData(object):
         energy_bins = _create_energy_bins(_energies)
         num_energy_bins = len(energy_bins) - 1
 
-        pitchangle_bins = np.linspace(0, 180, num_pitchangle_bins + 1)
+        pitchangle_bins = np.linspace(min_pitchangle, max_pitchangle, num_pitchangle_bins + 1)
 
         # Create masks -
         # 1. Mask invalid pitch angle values (fortunately this is only on one axis)

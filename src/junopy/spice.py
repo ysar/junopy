@@ -328,7 +328,7 @@ def get_object_position(
         position = np.asarray(position) / R_JUPITER
     elif "503" in center or "GANYMEDE" in center:
         position = np.asarray(position) / R_GANYMEDE
-
+    
     return position, light_times
 
 

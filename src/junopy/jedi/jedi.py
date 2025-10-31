@@ -74,7 +74,7 @@ class JediData:
 
         if not self.filename:  # Creates empty JediData object
             return None
-        
+
        # Read the data file and convert it to HDF5 if necessary.
         if ".hdf" in self.filename.suffix:
             self.read_hdf_file()
@@ -85,13 +85,13 @@ class JediData:
         # If we only want to save the data without further processing, exit early.
         if do_save_only:
             return
-        
-        # This method processes the metadata to filter out unwanted channels 
+
+        # This method processes the metadata to filter out unwanted channels
         # and species based on the arguments provided.
         self._process_metadata()
 
         self._assign_species_mass()
-        
+
         # Set all negative values to zero in the raw data.
         self._negative_values_to_zero()
 
@@ -101,13 +101,13 @@ class JediData:
         # Infer geometric factor using the ratio between count-rate and differential
         # intensity.  Geff = CR / J / Energy
         self.infer_geometric_factor()
-        
+
         # Infer the measurement uncertainty (sigma) for each channel based on Poisson statistics.
         self.infer_measurement_uncertainty()
 
         # Split the data into separate DataFrames for each SSD.
         self.split_data_by_ssd()
-        
+
 
     def read_raw_csv_file(self):
         """
@@ -162,7 +162,7 @@ class JediData:
 
     def _process_metadata(self):
         """
-        Process the metadata DataFrame to filter out unwanted channels and 
+        Process the metadata DataFrame to filter out unwanted channels and
         species.
         """
         df = self.metadata.copy()
@@ -234,7 +234,7 @@ class JediData:
 
     def _calculate_intensity_to_psd_conversion(self):
         """
-        Calculate the conversion factor from intensity (J) to phase space 
+        Calculate the conversion factor from intensity (J) to phase space
         density (PSD).
         This is based on the formula:
         f = m / v^2 j
@@ -262,10 +262,10 @@ class JediData:
             self.num_channels = int(len(self.metadata.index) / self.num_ssd)
         else:
             raise Exception("Unequal energy channels within each SSD.")
-    
+
     def infer_geometric_factor(self):
         """
-        Infer the geometric factor for each energy channel using the ratio 
+        Infer the geometric factor for each energy channel using the ratio
         between count-rate and differential intensity.
         Geff = CR / J / Energy
         where:
@@ -296,7 +296,7 @@ class JediData:
 
     def infer_measurement_uncertainty(self):
         """
-        Infer the measurement uncertainty (sigma) for each channel based on 
+        Infer the measurement uncertainty (sigma) for each channel based on
         Poisson statistics.
         Sigma = sqrt(CR) / (Geff * Energy)
         where:
@@ -306,7 +306,7 @@ class JediData:
             - Energy is the energy in [eV] for the channel.
         """
         sigma_columns = [x.replace(self.units, "SIGMA") for x in self.metadata["Channel"]]
-        
+
         df = pd.DataFrame(index=self.data_raw.index, columns=sigma_columns)
         for _, row in self.metadata.iterrows():
             channel = row["Channel"].replace(self.units, "FLUX")
@@ -375,31 +375,32 @@ class JediData:
 
     def create_energytime_df(self):
         """
-        Create the energy-time spectra in the form of a dataframe. Each energy 
+        Create the energy-time spectra in the form of a dataframe. Each energy
         channel has Elow and Ehigh values, which can be used to create non-contiguous
         energy bins.
 
         |El1---Eh1|, |El2---Eh2|, |El3---Eh3|, ...
-        
+
         This method will create separate energy-time spectra for each SSD.
-        The first column of the dataframe will be the instantaneous pitch 
+        The first column of the dataframe will be the instantaneous pitch
         """
+<<<<<<< Updated upstream
         return None
         if self.efilter:
             self.energybins = np.exp(np.linspace(
-                np.log(self.efilter[0]), np.log(self.efilter[1]), 
+                np.log(self.efilter[0]), np.log(self.efilter[1]),
                 self.nEbins + 1))
         else:
             self.energybins = np.exp(np.linspace(
-                np.log(self.metadata['Elow'].min()), 
+                np.log(self.metadata['Elow'].min()),
                 np.log(self.metadata['Ehigh'].max()), self.nEbins + 1))
 
         self.energytime = pd.DataFrame(
-            index=self.df_raw.index, 
+            index=self.df_raw.index,
             columns=['Ebin_{:d}'.format(x) for x in range(self.nEbins)])
 
         for j in range(self.nEbins):
-        
+
             meta = self.metadata.copy()
 
             meta['deltaE'] = meta['Ehigh'] - meta['Elow']
@@ -411,21 +412,21 @@ class JediData:
 
             meta = meta[~(meta['dE'] < 0)]
 
-            # Now we know the energy channels that are present within the j-th 
+            # Now we know the energy channels that are present within the j-th
             # energy bin. Knowing this, we can identify the pitch
             # angle associated with each energy channel.
-            
+
             denom = np.zeros(len(self.df_raw.index))
             val = np.zeros(len(self.df_raw.index))
 
             for _, row in meta.iterrows():
-                
+
                 scope = row['channel'][:2]    # Get telescope ID for E channel
                 pa = self.df_raw.loc[:, 'Pitch_Angle_{:s}'.format(scope)]\
                     .astype(float).values
 
                 # This is the solid angle of the measurement at a particular
-                # pitch angle, given that JEDI-I has an angular resolution of 
+                # pitch angle, given that JEDI-I has an angular resolution of
                 # approximately 26.7 degrees.
                 deltaSigma = 4 * np.pi * np.sin(pa * np.pi / 180) \
                              * np.sin(13.35 * np.pi / 180)
@@ -436,9 +437,9 @@ class JediData:
 
                 # deltaSigma[intensities == 0] = 0
 
-                val += intensities * row['dE'] # * deltaSigma  
+                val += intensities * row['dE'] # * deltaSigma
                 denom += row['dE'] # * deltaSigma
-                
+
                 # How to handle nans?
 
             condition =  (denom > 0)
@@ -447,10 +448,10 @@ class JediData:
                 val[condition] / denom[condition]
 
             self.energytime.loc[~condition, 'Ebin_{:d}'.format(j)] = np.nan
-        
+
 
     # To-do:
-    # [ ] Change 'Channel' to contain the telescope ID and remove the inherent units. Various data 
+    # [ ] Change 'Channel' to contain the telescope ID and remove the inherent units. Various data
     #     processing functions can then add the units as necessary.
     # [ ] Calculate the geometric factor using the count-rate and differential intensity.
     # [ ] Calculate the measurement uncertainty (sigma) using Poisson statistics.
@@ -458,3 +459,7 @@ class JediData:
     # [ ] Create pitch-angle spectrograms for particular energies for individual SSDs and combined.
     # [ ] Implement a method to visualize the spectrograms.
     # [ ] Create a vPerp-vParallel plot for selected time intervals.
+=======
+        pass
+    
+>>>>>>> Stashed changes

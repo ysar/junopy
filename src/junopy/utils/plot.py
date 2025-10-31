@@ -29,38 +29,32 @@ def find_ticks_between(
     """
     Given an axes object make the ticks appropriately for subplots.
     """
-    time_array = (
+    times = (
         pd.date_range(start=start, end=end, periods=nticks).to_pydatetime().tolist()
     )
 
-    position, _ = spice.get_juno_position(time_array)
+    position, _ = spice.get_juno_position(times)
 
     tickstring = []
     for i, pos in enumerate(position):
-        R, LT, Latitude = convert.convert_pos_spherical(pos)
+        radius, localtime, latitude = convert.convert_pos_spherical(pos)
 
         if i == 0:
             tickstring.append(
-                "Time - {:s}".format(time_array[i].strftime("%H:%M:%S"))
-                + "\n"
-                + "R  - {:7.2f}".format(R)
-                + "\n"
-                + "LT - {:7.2f}".format(LT)
-                + "\n"
-                + "Latitude - {:7.2f}".format(Latitude)
+                "Time - " + times[i].strftime("%H:%M:%S")
+                + f"\nR - {radius:7.2f}"
+                + f"\nLT - {localtime:7.2f}"
+                + f"\nLat - {latitude:7.2f}"
             )
         else:
             tickstring.append(
-                time_array[i].strftime("%H:%M:%S")
-                + "\n"
-                + "{:7.2f}".format(R)
-                + "\n"
-                + "{:7.2f}".format(LT)
-                + "\n"
-                + "{:7.2f}".format(Latitude)
+                times[i].strftime("%H:%M:%S")
+                + f"\n{radius:7.2f}"
+                + f"\n{localtime:7.2f}"
+                + f"\n{latitude:7.2f}"
             )
 
-    return time_array, tickstring
+    return times, tickstring
 
 
 # def find_ticks_between_Mshell(
@@ -71,12 +65,12 @@ def find_ticks_between(
 #     We would like to have :
 #     M shell, Latitude, SIII-Longitude
 #     """
-#     time_array = (
+#     times = (
 #         pd.date_range(start=start, end=end, periods=nticks).to_pydatetime().tolist()
 #     )
 
-#     position, _ = spice.get_juno_position(time_array, coordsystem="IAU_JUPITER")
-#     position_mag, _ = spice.get_juno_position(time_array, coordsystem="JUNO_MAG_VIP4")
+#     position, _ = spice.get_juno_position(times, coordsystem="IAU_JUPITER")
+#     position_mag, _ = spice.get_juno_position(times, coordsystem="JUNO_MAG_VIP4")
 
 #     tickstring = []
 #     for i, pos in enumerate(position):
@@ -95,7 +89,7 @@ def find_ticks_between(
 
 #         if i == 0 and appendlabels:
 #             tickstring.append(
-#                 "Time   {:s}".format(time_array[i].strftime(timeformat))
+#                 "Time   {:s}".format(times[i].strftime(timeformat))
 #                 + "\n"
 #                 + "R     {:7.2f}".format(r)
 #                 + "\n"
@@ -107,7 +101,7 @@ def find_ticks_between(
 #             )
 #         else:
 #             tickstring.append(
-#                 time_array[i].strftime(timeformat)
+#                 times[i].strftime(timeformat)
 #                 + "\n"
 #                 + "{:7.2f}".format(r)
 #                 + "\n"
@@ -118,7 +112,7 @@ def find_ticks_between(
 #                 + "{:7.2f}".format(lon)
 #             )
 
-#     return time_array, tickstring
+#     return times, tickstring
 
 
 # def find_ticks_between_deltaAlfven(
@@ -129,14 +123,14 @@ def find_ticks_between(
 #     We would like to have :
 #     M shell, Latitude, SIII-Longitude
 #     """
-#     time_array = (
+#     times = (
 #         pd.date_range(start=start, end=end, periods=nticks).to_pydatetime().tolist()
 #     )
 
-#     position, _ = spice.get_juno_position(time_array, coordsystem="IAU_JUPITER")
-#     position_mag, _ = spice.get_juno_position(time_array, coordsystem="JUNO_MAG_VIP4")
+#     position, _ = spice.get_juno_position(times, coordsystem="IAU_JUPITER")
+#     position_mag, _ = spice.get_juno_position(times, coordsystem="JUNO_MAG_VIP4")
 
-#     dAlfven = field.calc_delta_alfven_juno(time_array, satellite=satellite)
+#     dAlfven = field.calc_delta_alfven_juno(times, satellite=satellite)
 
 #     tickstring = []
 #     for i, pos in enumerate(position):
@@ -153,7 +147,7 @@ def find_ticks_between(
 
 #         if i == 0:
 #             tickstring.append(
-#                 "Time   {:s}".format(time_array[i].strftime(timeformat))
+#                 "Time   {:s}".format(times[i].strftime(timeformat))
 #                 + "\n"
 #                 + "M     {:7.2f}".format(M)
 #                 + "\n"
@@ -163,7 +157,7 @@ def find_ticks_between(
 #             )
 #         else:
 #             tickstring.append(
-#                 time_array[i].strftime(timeformat)
+#                 times[i].strftime(timeformat)
 #                 + "\n"
 #                 + "{:7.2f}".format(M)
 #                 + "\n"
@@ -172,4 +166,4 @@ def find_ticks_between(
 #                 + "{:7.2f}".format(dAlfven[i])
 #             )
 
-#     return time_array, tickstring
+#     return times, tickstring

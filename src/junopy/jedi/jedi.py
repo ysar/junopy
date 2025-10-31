@@ -462,4 +462,7 @@ class JediData:
 =======
         pass
     
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes

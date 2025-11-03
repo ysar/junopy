@@ -1,7 +1,6 @@
 site_name: junopy
 repo_url: https://github.com/ysar/JunoPy
 
-
 nav:
   # - index.md
   - junopy:
@@ -10,15 +9,15 @@ nav:
       - License: about/license.md
       - Release Notes: about/release-notes.md
       - Contributing: about/contributing.md
-      
+
   - Examples:
-    - examples/1_indexfile.ipynb
-    - examples/2_download_data.ipynb
-    - examples/3_spice.ipynb
-    - examples/4_mag_data.ipynb
-    - examples/5_waves_survey.ipynb
-    - examples/jedi_data.ipynb
-    - examples/jade_data.ipynb
+      - examples/1_indexfile.ipynb
+      - examples/2_download_data.ipynb
+      - examples/3_spice.ipynb
+      - examples/4_mag_data.ipynb
+      - examples/5_waves_survey.ipynb
+      - examples/jedi_data.ipynb
+      - examples/jade_data.ipynb
   - API Reference:
       - api/index.md
       - config: api/config.md
@@ -28,11 +27,11 @@ nav:
       - waves: api/waves.md
       - jedi: api/jedi.md
       - jade:
-        - jade.get: api/jade/get.md
-        - jade.read: api/jade/read.md
-        - jade.sensor: api/jade/sensor.md
-        - jade.plot: api/jade/plot.md
-        - jade.calib: api/jade/calib.md
+          - jade.get: api/jade/get.md
+          - jade.read: api/jade/read.md
+          - jade.sensor: api/jade/sensor.md
+          - jade.plot: api/jade/plot.md
+          - jade.calib: api/jade/calib.md
       - utils:
           - utils.download: api/utils/download.md
           - utils.compression: api/utils/compression.md
@@ -42,7 +41,7 @@ nav:
 theme:
   # font: false
   name: material
-  icon: 
+  icon:
     logo: material/home
   palette:
     # Palette toggle for light mode

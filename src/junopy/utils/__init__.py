@@ -13,6 +13,7 @@
 
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-from . import download
-from . import convert
-from . import plot
+from . import convert as convert
+from . import download as download
+from . import field as field
+from . import plot as plot

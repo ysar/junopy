@@ -5,19 +5,20 @@
 Module to work with Juno SPICE kernels.
 """
 
-import re
-import numpy as np
 import datetime as dt
-import spiceypy
-import urllib.request
 import logging
-from typing import Sequence
+import re
+import urllib.request
 from contextlib import ContextDecorator
 from pathlib import Path
+from typing import Sequence
+
+import numpy as np
+import spiceypy
 
 from junopy import config
-from junopy import utils
-from junopy.constants import R_JUPITER, R_GANYMEDE
+from junopy.constants import R_GANYMEDE, R_JUPITER
+from junopy.utils import download
 
 URL_JUNO_NAIF = "https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/"
 # This is where the final kernels are stored? Use the other NAIF URL
@@ -180,9 +181,7 @@ def download_juno_kernels(do_download: bool = True) -> None:
     ]
 
     if do_download and len(kernels_to_download) > 0:
-        utils.download.download_multiple_files(
-            kernels_to_download, output_files=output_files
-        )
+        download.download_multiple_files(kernels_to_download, output_files=output_files)
     else:
         logging.info("No new kernels to download")
 
@@ -328,7 +327,7 @@ def get_object_position(
         position = np.asarray(position) / R_JUPITER
     elif "503" in center or "GANYMEDE" in center:
         position = np.asarray(position) / R_GANYMEDE
-    
+
     return position, light_times
 
 

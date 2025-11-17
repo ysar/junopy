@@ -14,12 +14,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import numpy as np
 import datetime as dt
+
+import numpy as np
 import pandas as pd
+from matplotlib import axes
+from matplotlib.patches import Ellipse
 
 from junopy import spice
+
 from . import convert
+
 # from . import field
 
 
@@ -29,9 +34,7 @@ def find_ticks_between(
     """
     Given an axes object make the ticks appropriately for subplots.
     """
-    times = (
-        pd.date_range(start=start, end=end, periods=nticks).to_pydatetime().tolist()
-    )
+    times = pd.date_range(start=start, end=end, periods=nticks).to_pydatetime().tolist()
 
     position, _ = spice.get_juno_position(times)
 
@@ -41,7 +44,8 @@ def find_ticks_between(
 
         if i == 0:
             tickstring.append(
-                "Time - " + times[i].strftime("%H:%M:%S")
+                "Time - "
+                + times[i].strftime("%H:%M:%S")
                 + f"\nR - {radius:7.2f}"
                 + f"\nLT - {localtime:7.2f}"
                 + f"\nLat - {latitude:7.2f}"
@@ -55,6 +59,17 @@ def find_ticks_between(
             )
 
     return times, tickstring
+
+
+def plot_jupiter(ax: axes.Axes, **kwargs):
+    """
+    Plot Jupiter this axes.
+
+    Args:
+        ax (axes.Axes): Matplotlib axes on which to make this plot.
+    """
+    jupiter = Ellipse((0.0, 0.0), 2.0, 2.0 * (1.0 - 1.0 / 15.4), **kwargs)
+    ax.add_patch(jupiter)
 
 
 # def find_ticks_between_Mshell(

@@ -343,3 +343,17 @@ def convert_to_utc(et):
         utc (np.datetime64 | np.ndarray): Time in UTC
     """
     return spiceypy.et2utc(et, "ISOD", 6)
+
+
+@withspiceloaded()
+def convert_to_utc_v(et):
+    """
+    Convert time from ephemeris time to UTC format. (Vectorized)
+
+    Args:
+        et (np.ndarray): Array of ephemeris time.
+
+    Returns:
+        utc (np.ndarray): Array of times in UTC
+    """
+    return spiceypy.et2utc(et, "ISOD", 6)

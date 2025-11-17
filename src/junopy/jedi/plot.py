@@ -1,16 +1,16 @@
-import numpy as np
 import matplotlib as mpl
+import numpy as np
 import pandas as pd
-from matplotlib import colors
+from matplotlib import axes, collections, colors
 
 
 def plot_energy_spectra_ssd_native(
     df: pd.DataFrame,
     metadata: pd.DataFrame,
-    ax: mpl.axes.Axes,
+    ax: axes.Axes,
     vmin: float | None = None,
     vmax: float | None = None,
-    cmap: str = "turbo",
+    cmap: str | colors.Colormap = "turbo",
     zorder: int = 2,
     show_colorbar: bool = True,
     cbar_label: str = "",
@@ -46,7 +46,7 @@ def plot_energy_spectra_ssd_native(
     if show_colorbar:
         bbox = ax.get_position()
         cax = ax.figure.add_axes(
-            [bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1 - bbox.y0)]
+            (bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1 - bbox.y0)),
         )
         cbar = ax.figure.colorbar(mp, cax=cax)
         cbar.set_label(cbar_label)
@@ -57,27 +57,27 @@ def plot_energy_spectra_ssd_native(
 def plot_timeseries_spectra(
     df_spectra: pd.DataFrame,
     bins: np.ndarray,
-    ax: mpl.axes.Axes,
+    ax: axes.Axes,
     vmin: float | None = None,
     vmax: float | None = None,
     cmap: str = "turbo",
     zorder: int = 1,
     show_colorbar: bool = True,
-    cbar_label: str | None = None,
-) -> tuple[mpl.axes.Axes, mpl.collections.QuadMesh]:
+    cbar_label: str = "",
+) -> tuple[axes.Axes, collections.QuadMesh]:
     """
     Plot a time series of spectra from a dataframe.
 
     Args:
         df_spectra (pd.DataFrame): DataFrame containing spectral data with time as index.
         bins (np.ndarray): Array of spectral bins.
-        ax (mpl.axes.Axes): Matplotlib axes to plot on.
+        ax (axes.Axes): Matplotlib axes to plot on.
         vmin (float | None): Minimum value for color normalization.
         vmax (float | None): Maximum value for color normalization.
         cmap (str): Colormap to use for the plot.
         zorder (int): Z-order for the plot.
         show_colorbar (bool): Whether to show the colorbar.
-        cbar_label (str | None): Label for the colorbar.
+        cbar_label (str): Label for the colorbar.
 
     Returns:
         tuple: Tuple containing the axes and the QuadMesh object.
@@ -108,17 +108,17 @@ def plot_timeseries_spectra(
 
     norm = colors.LogNorm(vmin=vmin, vmax=vmax)
 
-    cmap = mpl.colormaps.get_cmap(cmap)
-    cmap.set_bad(color="0.5")
+    _cmap = mpl.colormaps.get_cmap(cmap)
+    _cmap.set_bad(color="0.5")
 
-    mp = ax.pcolormesh(time_bins, bins, z, norm=norm, cmap=cmap, zorder=zorder)
+    mp = ax.pcolormesh(time_bins, bins, z, norm=norm, cmap=_cmap, zorder=zorder)
 
-    ax.set_ylim([bins[0], bins[-1]])
+    ax.set_ylim(ymin=bins[0], ymax=bins[-1])
 
     if show_colorbar:
         bbox = ax.get_position()
         cax = ax.figure.add_axes(
-            [bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1 - bbox.y0)]
+            (bbox.x1 + 0.01, bbox.y0, 0.02, 0.8 * (bbox.y1 - bbox.y0))
         )
         cbar = ax.figure.colorbar(mp, cax=cax)
         cbar.set_label(cbar_label)

@@ -1,13 +1,14 @@
 # Copyright (c) 2018 Yash Sarkango
 # Licensed under the MIT License
 
+import datetime as dt
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-import datetime as dt
+from scipy.constants import e, m_e, m_p
 
-from pathlib import Path
-from scipy.constants import m_e, m_p, e
-
+from junopy import spice, utils
 
 JEDI_ANGULAR_RESOLUTION = 26.7  # degrees
 
@@ -49,14 +50,13 @@ class JediData:
 
     def __init__(
         self,
-        filename: Path = None,
-        start: dt.datetime = None,
-        stop: dt.datetime = None,
+        filename: Path | None = None,
+        start: dt.datetime | None = None,
+        stop: dt.datetime | None = None,
         species: str | None = None,
         units: str = "FLUX",
         # num_pitchangle_bins: int = 18,
         do_save_only: bool = False,
-        correct_cadence: dt.timedelta | None = None,
         # min_energy: float | None = None,
         # max_energy: float | None = None,
         # min_pitchangle: float = 0,
@@ -83,10 +83,6 @@ class JediData:
             self.read_raw_csv_file()
             self.convert_to_hdf_file()
 
-        if correct_cadence:
-            self.correct_cadence(correct_cadence)
-
-        # If we only want to save the data without further processing, exit early.
         if do_save_only:
             return
 
@@ -151,11 +147,12 @@ class JediData:
             self.filename, names=channel, skiprows=5
         )
 
-        self.data_raw["time"] = self.data_raw.apply(
-            lambda x: dt.datetime.strptime(x["UTC"], "%Y-%m-%dT%H:%M:%S"), axis=1
-        )  # JEDI data files do NOT contain microseconds or milliseconds.
+        times = self.data_raw["ETLookDirection"].values
+        times = spice.convert_to_utc_v(times)
 
-        self.data_raw.drop(labels="UTC", axis=1, inplace=True)
+        self.data_raw["time"] = [
+            dt.datetime.strptime(t, "%Y-%jT%H:%M:%S.%f") for t in times
+        ]
         self.data_raw.set_index(["time"], inplace=True)
         self.data_raw.sort_index(inplace=True)
 
@@ -181,27 +178,6 @@ class JediData:
         """
         self.data_raw: pd.DataFrame = pd.read_hdf(self.filename, key="df_raw")
         self.metadata: pd.DataFrame = pd.read_hdf(self.filename, key="metadata")
-
-    def correct_cadence(self, cadence: dt.timedelta):
-        """
-        Since the JEDI data files do not contain milli/microseconds, if the JEDI
-        data is collected at a cadence faster than 1 s, there are duplicate
-        values in the index.  In this case, a correction can be made to the
-        index.
-
-        Args:
-            cadence (dt.timedelta): The cadence to use for correcting the
-                duplicate entries.
-        """
-        times_corrected = self.data_raw.index.to_pydatetime()
-        duplicate_index = np.where(
-            (times_corrected[1:] - times_corrected[:-1]) == dt.timedelta(seconds=0.0)
-        )[0]
-
-        times_corrected[duplicate_index + 1] = (
-            times_corrected[duplicate_index] + cadence
-        )
-        self.data_raw.set_index(times_corrected, inplace=True)
 
     def _process_metadata(self):
         """
@@ -471,6 +447,7 @@ class JediSsdData:
         num_energy_bins: int = np.nan,
         num_pitchangle_bins: int = 18,
         weigh_solid_angle: bool = False,
+        mask_type: str = "min-to-max",
     ):
         """ """
         if np.isnan(min_energy):
@@ -482,47 +459,60 @@ class JediSsdData:
 
         self.min_energy = min_energy
         self.max_energy = max_energy
-        self.min_pitchangle = min_pitchangle
-        self.max_pitchangle = max_pitchangle
         self.num_energy_bins = num_energy_bins
-        self.num_pitchangle_bins = num_pitchangle_bins
-
         self.energy_bins = np.geomspace(
             self.min_energy,
             self.max_energy,
             self.num_energy_bins + 1,
         )
 
-        self.pitchangle_bins = np.linspace(
-            self.min_pitchangle,
-            self.max_pitchangle,
-            self.num_pitchangle_bins + 1,
-        )
+        if mask_type == "min-to-max":
+            self.num_pitchangle_bins = num_pitchangle_bins
 
-        self.mask_pitch_angles()
+            self.pitchangle_bins = np.linspace(
+                min_pitchangle,
+                max_pitchangle,
+                self.num_pitchangle_bins + 1,
+            )
+
+            min_pa = pd.Series(index=self.pitchangles_low.index, data=min_pitchangle)
+            max_pa = pd.Series(index=self.pitchangles_low.index, data=max_pitchangle)
+
+        else:
+            juno_trace = utils.field.JunoFieldTrace(self.data.index)
+
+            # Lower loss cone is from PA=0 to PA=LC
+            if mask_type == "lower-losscone":
+                min_pa = pd.Series(index=self.data.index, data=0.0)
+                max_pa = pd.Series(
+                    index=self.data.index, data=juno_trace.df["losscone_local"]
+                )
+
+            # Upper loss cone is from PA=(180-LC) to PA=180
+            if mask_type == "upper-losscone":
+                min_pa = pd.Series(
+                    index=self.data.index, data=180.0 - juno_trace.df["losscone_local"]
+                )
+                max_pa = pd.Series(index=self.data.index, data=180.0)
+
+        self.mask_pitch_angles(min_pa, max_pa)
         self.calc_energy_spectra(weigh_solid_angle)
         self.calc_pitch_angle_spectra()
 
-    def mask_pitch_angles(self):
+    def mask_pitch_angles(self, min_pa: pd.Series, max_pa: pd.Series):
         """
         Set data corresponding to unnecessary pitch-angles to np.nan
         """
         # Edge case when the lower PA is outside bounds, but not the upper
-        condition = (self.pitchangles_low < self.min_pitchangle) & (
-            self.pitchangles_high > self.min_pitchangle
-        )
-        self.pitchangles_low[condition] = self.min_pitchangle
+        condition = (self.pitchangles_low < min_pa) & (self.pitchangles_high > min_pa)
+        self.pitchangles_low[condition] = min_pa[condition]
 
         # Edge case when the lower PA is outside bounds, but not the upper
-        condition = (self.pitchangles_low < self.max_pitchangle) & (
-            self.pitchangles_high > self.max_pitchangle
-        )
-        self.pitchangles_high[condition] = self.max_pitchangle
+        condition = (self.pitchangles_low < max_pa) & (self.pitchangles_high > max_pa)
+        self.pitchangles_high[condition] = max_pa[condition]
 
         # Actual mask for the majority of the data
-        condition = (self.pitchangles_low >= self.min_pitchangle) & (
-            self.pitchangles_high <= self.max_pitchangle
-        )
+        condition = (self.pitchangles_low >= min_pa) & (self.pitchangles_high <= max_pa)
 
         self.data.loc[~condition, :] = np.nan
 

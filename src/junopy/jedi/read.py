@@ -62,6 +62,9 @@ class JediData:
         # min_pitchangle: float = 0,
         # max_pitchangle: float = 180,
     ):
+        if not filename:  # Creates empty JediData object
+            return None
+
         self.filename: Path = filename
         self.start: dt.datetime = start
         self.stop: dt.datetime = stop
@@ -72,9 +75,6 @@ class JediData:
         # self.max_energy: float | None = max_energy
         # self.min_pitchangle: float = min_pitchangle
         # self.max_pitchangle: float = max_pitchangle
-
-        if not self.filename:  # Creates empty JediData object
-            return None
 
         # Read the data file and convert it to HDF5 if necessary.
         if ".hdf" in self.filename.suffix:
@@ -404,6 +404,128 @@ class JediData:
                 )
             )
 
+    def merge_rebinned_ssd_data(
+        self,
+        **kwargs,
+    ):
+        """
+        Merge data from all SSDs for this JEDI file.
+
+        Args:
+            min_energy (float): Minimum energy to be used across SSDs.
+            max_energy (float): Maximum energy to be used across SSDs.
+            **kwargs: Arguments passed to `JediSsdData.rebin_data` for each SSD.
+        """
+        min_energy = kwargs.pop("min_energy", None)
+        max_energy = kwargs.pop("max_energy", None)
+        if not min_energy or not max_energy:
+            # Identify new energy bins based on minimum and maximum energies for each SSD. This is
+            # necessary otherwise `rebin_data` would provide different energy bins for each SSD.
+            min_energy = 1.0e8
+            max_energy = 0.01
+
+            for i_ssd in range(self.num_ssd):
+                min_energy = np.minimum(
+                    min_energy, self.ssd_data[i_ssd].metadata["Elow"].min()
+                )
+                max_energy = np.maximum(
+                    max_energy, self.ssd_data[i_ssd].metadata["Ehigh"].max()
+                )
+
+        for ssd in self.ssd_data:
+            ssd.rebin_data(min_energy=min_energy, max_energy=max_energy, **kwargs)
+
+        self.energy_bins = self.ssd_data[0].energy_bins
+        self.pitchangle_bins = self.ssd_data[0].pitchangle_bins
+        self.num_energy_bins = self.ssd_data[0].num_energy_bins
+        self.num_pitchangle_bins = self.ssd_data[0].num_pitchangle_bins
+
+        self.data_rebinned = _merge_dataframe(
+            [ssd.data_rebinned for ssd in self.ssd_data]
+        )
+
+        self.energy_spectra = _calc_energy_spectra(
+            self.data_rebinned,
+            self.pitchangle_bins,
+            self.num_energy_bins,
+            self.num_pitchangle_bins,
+            self.ssd_data[0].weigh_solid_angle,
+        )
+
+        self.pitchangle_spectra = _calc_pitchangle_spectra(
+            self.data_rebinned,
+            self.energy_bins,
+            self.num_energy_bins,
+            self.num_pitchangle_bins,
+            self.ssd_data[0].weigh_energy,
+        )
+
+
+def merge_multiple_jedi_data(
+    jedi_data_list,
+    **kwargs,
+):
+    """
+    Merge data from several JEDI data files.
+
+    Args:
+        jedi_data_list (list[JediData]): List of different JEDI data files corresponding to
+            different JEDI sensors (090, 180, 270)
+        **kwargs: Arguments passed to `JediSsdData.rebin_data` for each SSD.
+    """
+    min_energy = kwargs.pop("min_energy", None)
+    max_energy = kwargs.pop("max_energy", None)
+    if not min_energy or not max_energy:
+        # Identify new energy bins based on minimum and maximum energies for each SSD. This is
+        # necessary otherwise `rebin_data` would provide different energy bins for each SSD.
+        min_energy = 1.0e8
+        max_energy = 0.01
+
+        for jedi_data in jedi_data_list:
+            for i_ssd in range(jedi_data.num_ssd):
+                min_energy = np.minimum(
+                    min_energy, jedi_data.ssd_data[i_ssd].metadata["Elow"].min()
+                )
+                max_energy = np.maximum(
+                    max_energy, jedi_data.ssd_data[i_ssd].metadata["Ehigh"].max()
+                )
+
+    rebinned_data_list = []
+    for jedi_data in jedi_data_list:
+        for ssd in jedi_data.ssd_data:
+            ssd.rebin_data(min_energy=min_energy, max_energy=max_energy, **kwargs)
+        rebinned_data_list += [ssd.data_rebinned for ssd in jedi_data.ssd_data]
+
+    merged = JediData()
+    merged.start = jedi_data_list[0].start
+    merged.stop = jedi_data_list[0].stop
+    merged.species = jedi_data_list[0].species
+    merged.units = jedi_data_list[0].units
+    merged.energy_bins = jedi_data_list[0].ssd_data[0].energy_bins
+    merged.pitchangle_bins = jedi_data_list[0].ssd_data[0].pitchangle_bins
+    merged.num_energy_bins = jedi_data_list[0].ssd_data[0].num_energy_bins
+    merged.num_pitchangle_bins = jedi_data_list[0].ssd_data[0].num_pitchangle_bins
+    weigh_energy = jedi_data_list[0].ssd_data[0].weigh_energy
+    weigh_solid_angle = jedi_data_list[0].ssd_data[0].weigh_solid_angle
+
+    merged.data_rebinned = _merge_dataframe(rebinned_data_list)
+    merged.energy_spectra = _calc_energy_spectra(
+        merged.data_rebinned,
+        merged.pitchangle_bins,
+        merged.num_energy_bins,
+        merged.num_pitchangle_bins,
+        weigh_solid_angle,
+    )
+
+    merged.pitchangle_spectra = _calc_pitchangle_spectra(
+        merged.data_rebinned,
+        merged.energy_bins,
+        merged.num_energy_bins,
+        merged.num_pitchangle_bins,
+        weigh_energy,
+    )
+    return merged
+
 
 class JediSsdData:
     def __init__(
@@ -415,7 +537,7 @@ class JediSsdData:
         units,
     ):
         """
-        Store data for each SSD separately.
+        Store data for each solid-state detector (SSD) separately.
 
         Attributes:
             metadata (pd.DataFrame): Contains information for the channel name, min. and max.
@@ -438,18 +560,47 @@ class JediSsdData:
         self.pitchangles_high = pitchangles_high
         self.units = units
 
-    def rebin_energy_pitchangle(
+    def rebin_data(
         self,
         min_energy: float = np.nan,
         max_energy: float = np.nan,
+        num_energy_bins: int = np.nan,
         min_pitchangle: float = 0.0,
         max_pitchangle: float = 180.0,
-        num_energy_bins: int = np.nan,
         num_pitchangle_bins: int = 18,
         weigh_solid_angle: bool = False,
-        mask_type: str = "min-to-max",
+        weigh_energy: bool = False,
+        pitchangle_mask_type: str = "min-to-max",
+        cadence: dt.timedelta = dt.timedelta(seconds=1),
     ):
-        """ """
+        """
+        Re-bin the data into [time, energy, pitchangle] bins.  Store in a pandas DataFrame with
+        multiple columns.
+
+        For each energy bin (i) and pitch-angle bin (j),
+            - Identify the support of the SSD measurement in that bin (extension from 1d to 2d).
+                In 1D the support is defined as `s = min(E_h, E_i+1) - max(E_l, E_i)`.  We extend
+                this to 2D by consider different supports for energy and pitch-angle and using the
+                product as the support for 2D averaging.
+            -
+
+        Args:
+            min_energy (float): Minimum energy to consider.
+            max_energy (float): Maximum energy to consider.
+            num_energy_bins (int): Number of energy bins.
+            min_pitchangle (float): Minimum pitch-angle to consider.
+            max_pitchangle (float): Maximum pitch-angle to consider.
+            num_pitchangle_bins (int): Number of pitch-angle bins.
+            weigh_solid_angle (bool): Whether to use solid-angle weights during averaging
+                (True) or use unweighted averages (False).
+            weigh_energy (bool): Whether to use energy weights during averaging (True) or use
+                unweighted averages (False).
+            pitchangle_mask_type (str): Type of pitch-angle mask (Options - 'min-to-max', 'lower-losscone', 'upper-losscone')
+        """
+
+        self.weigh_solid_angle = weigh_solid_angle
+        self.weigh_energy = weigh_energy
+
         if np.isnan(min_energy):
             min_energy = self.metadata["Elow"].min()
         if np.isnan(max_energy):
@@ -457,75 +608,59 @@ class JediSsdData:
         if np.isnan(num_energy_bins):
             num_energy_bins = len(self.metadata["Channel"])
 
-        self.min_energy = min_energy
-        self.max_energy = max_energy
+        # Create energy bins
         self.num_energy_bins = num_energy_bins
         self.energy_bins = np.geomspace(
-            self.min_energy,
-            self.max_energy,
+            min_energy,
+            max_energy,
             self.num_energy_bins + 1,
         )
 
-        if mask_type == "min-to-max":
-            self.num_pitchangle_bins = num_pitchangle_bins
+        self.num_pitchangle_bins = num_pitchangle_bins
+        self.pitchangle_bins = np.linspace(
+            min_pitchangle,
+            max_pitchangle,
+            self.num_pitchangle_bins + 1,
+        )
+        mid_pitchangles = 0.5 * (self.pitchangles_high + self.pitchangles_low)
+        times = self.data.index
+        data = self.data.copy().fillna(0.0)
 
-            self.pitchangle_bins = np.linspace(
-                min_pitchangle,
-                max_pitchangle,
-                self.num_pitchangle_bins + 1,
+        # Mask data correponding to unnecessary pitch-angles
+        pitchangle_mask, pitchangles_low, pitchangles_high = self._mask_pitch_angles(
+            mask_type=pitchangle_mask_type,
+            min_pitchangle=min_pitchangle,
+            max_pitchangle=max_pitchangle,
+        )
+        data.loc[~pitchangle_mask, :] = np.nan
+
+        col_names: list[str] = []
+        for i in range(self.num_energy_bins):
+            col_names.extend(
+                [f"energy_{i}_pitchangle_{j}_" for j in range(self.num_pitchangle_bins)]
             )
 
-            min_pa = pd.Series(index=self.pitchangles_low.index, data=min_pitchangle)
-            max_pa = pd.Series(index=self.pitchangles_low.index, data=max_pitchangle)
+        df = pd.DataFrame(index=times, columns=col_names, data=np.nan)
 
-        else:
-            juno_trace = utils.field.JunoFieldTrace(self.data.index)
-
-            # Lower loss cone is from PA=0 to PA=LC
-            if mask_type == "lower-losscone":
-                min_pa = pd.Series(index=self.data.index, data=0.0)
-                max_pa = pd.Series(
-                    index=self.data.index, data=juno_trace.df["losscone_local"]
-                )
-
-            # Upper loss cone is from PA=(180-LC) to PA=180
-            if mask_type == "upper-losscone":
-                min_pa = pd.Series(
-                    index=self.data.index, data=180.0 - juno_trace.df["losscone_local"]
-                )
-                max_pa = pd.Series(index=self.data.index, data=180.0)
-
-        self.mask_pitch_angles(min_pa, max_pa)
-        self.calc_energy_spectra(weigh_solid_angle)
-        self.calc_pitch_angle_spectra()
-
-    def mask_pitch_angles(self, min_pa: pd.Series, max_pa: pd.Series):
-        """
-        Set data corresponding to unnecessary pitch-angles to np.nan
-        """
-        # Edge case when the lower PA is outside bounds, but not the upper
-        condition = (self.pitchangles_low < min_pa) & (self.pitchangles_high > min_pa)
-        self.pitchangles_low[condition] = min_pa[condition]
-
-        # Edge case when the lower PA is outside bounds, but not the upper
-        condition = (self.pitchangles_low < max_pa) & (self.pitchangles_high > max_pa)
-        self.pitchangles_high[condition] = max_pa[condition]
-
-        # Actual mask for the majority of the data
-        condition = (self.pitchangles_low >= min_pa) & (self.pitchangles_high <= max_pa)
-
-        self.data.loc[~condition, :] = np.nan
-
-    def calc_energy_spectra(self, weigh_solid_angle):
-        times = self.data.index
-        data = self.data.fillna(0)
-
-        self.energy_spectra = pd.DataFrame(
+        # We calculate the pitch-angle support for this SSD.  This is time-variable, so we
+        # store it as a pd.DataFrame with index the same as self.pitchangle_low and self.pitchangle_high
+        # and columns as different user-defined pitch-angle bins.  We can also do this beforehand in
+        # a vectorized manner.
+        support_pitchangle = pd.DataFrame(
             index=times,
-            columns=[f"energy_bin_{i}" for i in range(self.num_energy_bins)],
+            columns=[f"PA_{j}" for j in range(self.num_pitchangle_bins)],
+            data=0.0,
         )
 
+        for j in range(self.num_pitchangle_bins):
+            support_pitchangle.loc[:, f"PA_{j}"] = np.minimum(
+                pitchangles_high, self.pitchangle_bins[j + 1]
+            ) - np.maximum(pitchangles_low, self.pitchangle_bins[j])
+
+        # Averaging loop - outer over energies
         for i in range(self.num_energy_bins):  # For each user-specified bin
+            # First we have to identify the native energy bins that are valid for this user-defined
+            # energy bin.
             meta = self.metadata.copy()
             meta["bandwidth"] = meta["Ehigh"] - meta["Elow"]
 
@@ -535,56 +670,194 @@ class JediSsdData:
 
             meta = meta[~(meta["support"] < 0)]
 
-            # Now we know the energy channels that are present within the j-th
-            # energy bin. Knowing this, we can identify the pitch
-            # angle associated with each energy channel.
+            # Averaging loop - inner over pitch angles
+            for j in range(self.num_pitchangle_bins):
+                # The final loop over times is vectorized.
+                denom = np.zeros(len(times))
+                val = np.zeros(len(times))
 
-            denom = np.zeros(len(times))
-            val = np.zeros(len(times))
-
-            for _, row in meta.iterrows():  # For each energy channel
-                if weigh_solid_angle:
-                    # This is the solid angle of the measurement at a particular
-                    # pitch angle, given that JEDI-I has an angular resolution of
-                    # approximately 26.7 degrees.
-                    delta_sigma = (
-                        2
-                        * np.pi
-                        * (
-                            np.cos(self.pitchangles_low * np.pi / 180)
-                            - np.cos(self.pitchangles_high * np.pi / 180)
+                for _, row in meta.iterrows():  # For each energy channel
+                    if weigh_solid_angle:
+                        # This is the solid angle of the measurement at a particular
+                        # pitch-angle.
+                        weight_pitchangle = (
+                            2
+                            * np.pi
+                            * np.sin(mid_pitchangles)
+                            * np.sin(0.5 * support_pitchangle.loc[:, f"PA_{j}"])
                         )
-                    )
+                    else:
+                        weight_pitchangle = support_pitchangle.loc[:, f"PA_{j}"]
+
+                    if weigh_energy:
+                        weight_energy = row["support"] * row["bandwidth"]
+                    else:
+                        weight_energy = row["support"]
 
                     # Need to ignore NaN values while summing.
-                    delta_sigma[np.isnan(delta_sigma)] = 0.0
-                else:
-                    delta_sigma = 1.0
+                    weight_pitchangle[np.isnan(weight_pitchangle)] = 0.0
+                    if np.isnan(weight_energy):
+                        weight_energy = 0.0
 
-                col_name = " ".join([row["Channel"], self.units])
-                val += row["support"] * data.loc[:, col_name].values.T * delta_sigma
-                denom += row["support"] * delta_sigma
+                    col_name = " ".join([row["Channel"], self.units])
+                    val += (
+                        data.loc[:, col_name].values.T
+                        * weight_pitchangle
+                        * weight_energy
+                    )
+                    denom += weight_pitchangle * weight_energy
 
-            condition = denom > 0
+                # End of energy channel loop
 
-            self.energy_spectra.loc[condition, f"energy_bin_{i}"] = (
-                val[condition] / denom[condition]
+                condition = denom > 0
+
+                df.loc[condition, f"energy_{i}_pitchangle_{j}_"] = (
+                    val[condition] / denom[condition]
+                )
+                # df.loc[~condition, f"energy_{i}_pitchangle_{j}_"] = np.nan
+            # End of user-defined pitch-angle bins loop.
+        # End of user-defined energy bins loop.
+
+        self.data_rebinned = df.resample(cadence).mean()
+
+    def calc_energy_spectra(self):
+        self.energy_spectra = _calc_energy_spectra(
+            self.data_rebinned,
+            self.pitchangle_bins,
+            self.num_energy_bins,
+            self.num_pitchangle_bins,
+            self.weigh_solid_angle,
+        )
+
+    def calc_pitchangle_spectra(self):
+        self.pitchangle_spectra = _calc_pitchangle_spectra(
+            self.data_rebinned,
+            self.energy_bins,
+            self.num_energy_bins,
+            self.num_pitchangle_bins,
+            self.weigh_energy,
+        )
+
+    def _mask_pitch_angles(
+        self,
+        mask_type: str = "min-to-max",
+        min_pitchangle: float = 0.0,
+        max_pitchangle: float = 180.0,
+    ):
+        """
+        Identify pitch-angles to be masked during the energy spectra calculations.
+
+        Args:
+            mask_type (str): Type of pitch-angle mask (Options - 'min-to-max', 'lower-losscone', 'upper-losscone')
+            min_pitchangle (float): Minimum pitch-angle to consider.
+            max_pitchangle (float): Maximum pitch-angle to consider.
+        """
+        pitchangles_low = self.pitchangles_low.copy()
+        pitchangles_high = self.pitchangles_high.copy()
+
+        times = self.pitchangles_low.index
+
+        if mask_type == "min-to-max":
+            min_pa = pd.Series(index=times, data=min_pitchangle)
+            max_pa = pd.Series(index=times, data=max_pitchangle)
+
+        # Lower loss cone is from PA=0 to PA=LC
+        elif mask_type == "lower-losscone":
+            juno_trace = utils.field.JunoFieldTrace(self.data.index)
+            min_pa = pd.Series(index=times, data=0.0)
+            max_pa = pd.Series(index=times, data=juno_trace.df["losscone_local"])
+
+        # Upper loss cone is from PA=(180-LC) to PA=180
+        elif mask_type == "upper-losscone":
+            juno_trace = utils.field.JunoFieldTrace(self.data.index)
+            min_pa = pd.Series(
+                index=times, data=180.0 - juno_trace.df["losscone_local"]
             )
-            self.energy_spectra.loc[~condition, f"energy_bin_{i}"] = np.nan
+            max_pa = pd.Series(index=times, data=180.0)
 
-    def calc_pitch_angle_spectra(self):
-        pass
+        else:
+            raise Exception("Unknown mask type for energy spectra calculation.")
 
-    # To-do:
-    # [x] Change 'Channel' to contain the telescope ID and remove the inherent units. Various data
-    #     processing functions can then add the units as necessary.
-    # [x] Calculate the geometric factor using the count-rate and differential intensity.
-    # [x] Calculate the measurement uncertainty (sigma) using Poisson statistics.
+        # Edge case when the lower PA is outside bounds, but not the upper
+        condition = (pitchangles_low < min_pa) & (pitchangles_high > min_pa)
+        pitchangles_low[condition] = min_pa[condition]
+
+        # Edge case when the upper PA is outside bounds, but not the lower
+        condition = (pitchangles_low < max_pa) & (pitchangles_high > max_pa)
+        pitchangles_high[condition] = max_pa[condition]
+
+        # Actual mask for the majority of the data
+        condition = (pitchangles_low >= min_pa) & (pitchangles_high <= max_pa)
+
+        return condition, pitchangles_low, pitchangles_high
 
 
-def merge_spectra(df_list: list[pd.DataFrame]):
+# When aggregating in pandas, we want to avoid counting nans as zeros.
+def _weighted_nanmean(x, weights):
+    _valid_indices = ~(np.isnan(x) | np.isnan(weights))
+    return np.average(x[_valid_indices], weights=weights[_valid_indices])
+
+
+def _calc_energy_spectra(
+    data: pd.DataFrame,
+    pitchangle_bins: np.ndarray,
+    num_energy_bins: int,
+    num_pitchangle_bins: int,
+    weigh_solid_angle: bool = False,
+):
     """
-    Merge multiple time-series spectra together, assuming that they share
+    Calculate the energy spectra based on the rebinned data.
+    """
+    energy_cols = [f"energy_{i}" for i in range(num_energy_bins)]
+    df = pd.DataFrame(index=data.index, columns=energy_cols, data=np.nan)
+
+    if weigh_solid_angle:
+        pitchangle_delta = pitchangle_bins[1:] - pitchangle_bins[:-1]
+        pitchangle_mid = 0.5 * (pitchangle_bins[1:] + pitchangle_bins[:-1])
+        weights = 2 * np.pi * np.sin(pitchangle_mid) * np.sin(0.5 * pitchangle_delta)
+    else:
+        weights = np.full(num_pitchangle_bins, 1.0)
+
+    for i in range(num_energy_bins):
+        df.iloc[:, i] = (
+            data.filter(like=f"energy_{i}_", axis=1)
+            .fillna(0.0)
+            .agg(lambda x: _weighted_nanmean(x, weights), axis=1)
+        )
+    return df
+
+
+def _calc_pitchangle_spectra(
+    data: pd.DataFrame,
+    energy_bins: np.ndarray,
+    num_energy_bins: int,
+    num_pitchangle_bins: int,
+    weigh_energy: bool = False,
+):
+    """
+    Calculate the pitch-angle spectra based on the rebinned data.
+    """
+    pitchangle_cols = [f"pitchangle_{j}_" for j in range(num_pitchangle_bins)]
+    df = pd.DataFrame(index=data.index, columns=pitchangle_cols, data=np.nan)
+
+    if weigh_energy:
+        weights = energy_bins[1:] - energy_bins[:-1]
+    else:
+        weights = np.full(num_energy_bins, 1.0)
+
+    for j in range(num_pitchangle_bins):
+        df.iloc[:, j] = (
+            data.filter(like=f"pitchangle_{j}_", axis=1)
+            .fillna(0.0)
+            .agg(lambda x: _weighted_nanmean(x, weights), axis=1)
+        )
+
+    return df
+
+
+def _merge_dataframe(df_list: list[pd.DataFrame]):
+    """
+    Merge multiple time-series DataFrame together, assuming that they share
     index and bins.  The index does not have to be exactly the same but items
     in the index must be present in both time-series. (i.e. its a join).
 

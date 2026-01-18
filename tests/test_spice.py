@@ -1,18 +1,17 @@
 
-import numpy as np
 import datetime as dt
 
-from JunoPy.spice import withspiceloaded, get_juno_position
+from junopy import spice
+from junopy import config
 
-@withspiceloaded()
 def test_spice():
     """
+    This test checks if SPICE kernels are loaded and Juno position can be retrieved.
     """
-    
     times = [
         dt.datetime(2016, 12, 1),
         dt.datetime(2017, 12, 1),
         dt.datetime(2018, 12, 1),
     ]
-    pos, _ = get_juno_position(times, coordsystem='JUNO_JSS')
+    pos, _ = spice.get_juno_position(times, coordsystem='JUNO_JSS')
     print(pos)

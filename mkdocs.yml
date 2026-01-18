@@ -1,25 +1,122 @@
-site_name: "JunoPy"
+site_name: junopy
+repo_url: https://github.com/ysar/JunoPy
 
 nav:
-  - Home: index.md
-  - Getting Started: getting-started.md
-  - Modules:
-    - Magnetometer: modules/magnetometer.md
-    - Waves: modules/waves.md
-    - JEDI: modules/jedi.md
-    - JADE: modules/jade.md
-    - Auxiliary: modules/auxiliary.md
-  - About: 
-    - License: about/license.md
-    - Release Notes: about/release-notes.md
-    - Contributing: about/contributing.md
+  # - index.md
+  - junopy:
+      - index.md
+      - Getting Started: getting-started.md
+      - License: about/license.md
+      - Release Notes: about/release-notes.md
+      - Contributing: about/contributing.md
 
+  - Examples:
+      - examples/1_indexfile.ipynb
+      - examples/2_download_data.ipynb
+      - examples/3_spice.ipynb
+      - examples/4_mag_data.ipynb
+      - examples/5_waves_survey.ipynb
+      - examples/jedi_data.ipynb
+      - examples/jade_data.ipynb
+  - API Reference:
+      - api/index.md
+      - config: api/config.md
+      - index: api/indexfiles.md
+      - spice: api/spice.md
+      - mag: api/mag.md
+      - waves: api/waves.md
+      - jedi: api/jedi.md
+      - jade:
+          - jade.get: api/jade/get.md
+          - jade.read: api/jade/read.md
+          - jade.sensor: api/jade/sensor.md
+          - jade.plot: api/jade/plot.md
+          - jade.calib: api/jade/calib.md
+      - utils:
+          - utils.download: api/utils/download.md
+          - utils.compression: api/utils/compression.md
+          - utils.convert: api/utils/convert.md
+          - utils.field: api/utils/field.md
+          - utils.misc: api/utils/misc.md
 theme:
-  name: "readthedocs"
+  # font: false
+  name: material
+  icon:
+    logo: material/home
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
 
-# plugins:
-# - search
-# - mkdocstrings
+    # Palette toggle for dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - announce.dismiss
+    - content.action.edit
+    - content.action.view
+    - content.code.annotate
+    - content.code.copy
+    - content.tooltips
+    - navigation.footer
+    - navigation.instant.preview
+    - navigation.path
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.indexes
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+# theme:
+#   name: readthedocs
+
+# theme:
+#   name: null
+#   custom_dir: cinder
+#   highlightjs: true
+#   hljs_languages:
+#       - python
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_options:
+              ignore_init_summary: false
+            # docstring_section_style: list
+            filters: ["!^_"]
+            heading_level: 2
+            inherited_members: true
+            merge_init_into_class: true
+            parameter_headings: false
+            separate_signature: true
+            show_root_heading: true
+            show_root_full_path: true
+            show_signature_annotations: true
+            show_source: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            signature_crossrefs: true
+            summary: true
+  - mkdocs-jupyter
 
 # markdown-extensions:
 #   - smarty
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences

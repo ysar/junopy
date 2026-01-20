@@ -9,40 +9,24 @@ individually.
 
 ## Installation
 
-1. (Optional) For any project, it is recommended that you create a virtual
-environment where you can install packages like junopy and its dependencies.
-Using a virtual environment is a straightforward way to prevent conflict between
-different versions of the same package and compartmentalize your workflow.
+I use [`uv`](https://docs.astral.sh/uv/) for installing `junopy` and it is very 
+easy to install this way. `uv` will create a virtual environment for this 
+project, so you needn't worry about corrupting your global environment. (You
+can also explicitly create a virtual environment using `uv venv`)
 
-    You can use the `venv` module to create a virtual environment in a
-    directory and activate it using the following commands.
 
-        $ python -m venv .venv
-        $ source .venv/bin/activate
+If you do not forsee making changes to the `junopy` source code, clone the git repository, `cd` into
+the `junopy` directory and run - 
+```
+$ uv pip install .
+```
 
-    You can deactivate the virtual environment by calling the `deactivate`
-    script
+If you do forsee making changes to `junopy`, use the `-e` flag. (for editable install)
+```
+$ uv pip install -e .
+```
 
-        $ deactivate
-
-2. One you have made your environment and activated it, you can enter the junopy
-directory and install junopy using `pip`.
-
-        $ pip install .
-
-    If you wish to edit the core of junopy, you can use the `-e` flag during
-    installation. This indicates that the package is editable and any changes
-    made to the package after installation will take effect immediately.
-
-        $ pip install -e .
-
-3. With junopy successfully installed, all you need to do to use it is import
-it into your code and use it.
-
-    ```python
-    import junopy
-    from junopy import mag
-    ```
+`uv` will install all necessary dependencies.
 
 ## Usage
 

@@ -357,3 +357,41 @@ def convert_to_utc_v(et):
         utc (np.ndarray): Array of times in UTC
     """
     return spiceypy.et2utc(et, "ISOD", 6)
+
+
+@withspiceloaded()
+def calc_rotation_matrix(
+    times: list[dt.datetime],
+    coordsystem_in: str,
+    coordsystem_out: str,
+) -> np.ndarray:
+    """
+    Get the rotation matrix to convert from one coordinate system to another.
+
+    Args:
+        times (list[dt.datetime]): List of times in dt.datetime. The rotation matrix is calculated
+            for each time.
+        coordsystem_in (str): The coordinate system to convert from. (source)
+        coordsystem_out (str): The coordinate system to conver to. (target)
+
+    Returns:
+        rotation_matrix (np.ndarray): Returns a numpy array with the first dimension corresponding
+            to one time in the input `times` list and the remaining two corresponding to the 3x3
+            cartesian rotation matrix between the coordinate systems.
+    Warning:
+        This is just the rotation matrix. If you are using this to convert positions, you also
+        need to account for the offset between the origin of each coordinate system.
+    """
+    num_times = len(times)
+    rotation_matrix = np.empty((num_times, 3, 3))
+
+    for i, t in enumerate(times):
+        time_et = spiceypy.str2et(dt.datetime.strftime(t, "%Y-%m-%dT%H:%M:%S.%f"))
+
+        rotation_matrix[i, :, :] = spiceypy.pxform(
+            coordsystem_in,
+            coordsystem_out,
+            time_et,
+        )
+
+    return rotation_matrix

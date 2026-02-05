@@ -26,13 +26,13 @@ reading the .DAT (uncompressed) file is also possible.
 """
 
 import datetime as dt
+import logging
+import re
+import struct
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-import struct
-import re
-import logging
-
-from pathlib import Path
 from isal import igzip
 
 
@@ -129,10 +129,7 @@ class JadeBinaryData(object):
             return None
 
         self.filename = filename
-        df = JadeBinaryData.read_jade_binary_file(filename)
-
-        if start and stop:
-            df = df.loc[start:stop].copy()
+        df = JadeBinaryData.read_jade_binary_file(filename, start, stop)
 
         self.times = df.index
 
@@ -140,7 +137,9 @@ class JadeBinaryData(object):
         self.packetids = [int(x) for x in self.data_by_packetid.keys()]
 
     @staticmethod
-    def read_jade_binary_file(file_path: Path) -> pd.DataFrame:
+    def read_jade_binary_file(
+        file_path: Path, start: dt.datetime | None, stop: dt.datetime | None
+    ) -> pd.DataFrame:
         """
         Reads the JADE .DAT file into a single pandas DataFrame. This method assumes
         that the corresponding .LBL file is stored in the same directory as the .DAT
@@ -148,6 +147,8 @@ class JadeBinaryData(object):
 
         Args:
             filename (Path): Path to the .DAT file being read.
+            start (dt.datetime | None): Start time to read from.
+            stop (dt.datetime | None): Stop time to read until.
 
         Returns:
             df (pandas.DataFrame): DataFrame containing the information stored in
@@ -162,9 +163,13 @@ class JadeBinaryData(object):
 
         df_label, num_records = read_jade_lbl_file(lbl_file)
 
-        df = JadeBinaryData._read_jade_bytes(file_path, df_label, num_records)
+        df = JadeBinaryData._read_jade_bytes(
+            file_path, df_label, num_records, start, stop
+        )
 
-        for _, column in df_label.iterrows():
+        for i, column in df_label.iloc[1:].iterrows():
+            # Skips the first column (DIM0_UTC) since we already processed it while reading in the
+            # file.
             if column["dataID-np"] == "s":
                 df[column["name"]] = df[column["name"]].apply(
                     lambda x: x[0].decode("UTF-8").strip()
@@ -178,9 +183,10 @@ class JadeBinaryData(object):
             elif column["nDim"] == 1 and column["shape"] == 1:
                 df[column["name"]] = df[column["name"]].apply(lambda x: x[0])
 
-        df["time"] = pd.Series(
-            map(lambda x: dt.datetime.strptime(x, "%Y-%jT%H:%M:%S.%f"), df["DIM0_UTC"])
-        )
+        # df["time"] = pd.Series(
+        #     map(lambda x: dt.datetime.strptime(x, "%Y-%jT%H:%M:%S.%f"), df["DIM0_UTC"])
+        # )
+        df["time"] = df["DIM0_UTC"]
 
         df.set_index("time", inplace=True)
 
@@ -188,7 +194,11 @@ class JadeBinaryData(object):
 
     @staticmethod
     def _read_jade_bytes(
-        filename: Path, df_label: pd.DataFrame, num_records: int
+        filename: Path,
+        df_label: pd.DataFrame,
+        num_records: int,
+        start: dt.datetime | None,
+        stop: dt.datetime | None,
     ) -> pd.DataFrame:
         """
         Reads in various bytes from the .DAT file and inserts them into a DataFrame.
@@ -211,7 +221,7 @@ class JadeBinaryData(object):
             reshaped later).
         """
         logging.debug(f"Reading JADE binary file - {filename}")
-        data = pd.DataFrame(columns=df_label["name"].to_list())
+        # data = pd.DataFrame(columns=df_label["name"].to_list())
 
         # We will create numpy arrays to store data and then copy over the array to
         # the DataFrame. This is much faster than using .at() or .loc().
@@ -230,26 +240,53 @@ class JadeBinaryData(object):
 
         f = open_file(filename, "rb")
 
-        i = 0
+        def __read_record_item(f, num_bytes, num_shape, fmt):
+            # Read one item in the record.
+            readdata = f.read(num_bytes)
+            return struct.unpack(f"{num_shape}{fmt}", readdata)
 
-        while True:
-            for j in range(len(df_label)):
-                readdata = f.read(nbytes[j])
+        def __read_utc_time(f, num_bytes, num_shape, fmt):
+            # Read the UTC time that marks the beginning of each record.
+            val = __read_record_item(f, num_bytes, num_shape, fmt)
+            return dt.datetime.strptime(
+                val[0].decode("UTF-8").strip(), "%Y-%jT%H:%M:%S.%f"
+            )
 
-                if readdata == b"":  # Check for end of file.
-                    for name in names:
-                        data[name] = datadict[name]
-                    f.close()
-                    return data
+        num_bytes_to_skip = df_label["nbytes"].sum() - nbytes[0]
+        valid_indices = []
 
-                datadict[names[j]][i] = struct.unpack(f"{n[j]}{fmt[j]}", readdata)
+        for i in range(num_records):
+            t = __read_utc_time(f, nbytes[0], n[0], fmt[0])
 
-            i += 1
+            if start and t < start:
+                # Need to skip the rest of the records but advance the file pointer.
+                # Here "1" means skip from the current file position.
+                f.seek(num_bytes_to_skip, 1)
+                continue
+
+            if stop and t > stop:
+                # If we have gone beyond what is required, we can close the file.
+                f.close()
+                break
+
+            valid_indices.append(i)
+            datadict[names[0]][i] = t
+
+            # Read the rest of the data for this record.
+            for j in range(1, len(df_label)):
+                datadict[names[j]][i] = __read_record_item(f, nbytes[j], n[j], fmt[j])
+
+        # Remove invalid indices that correspond to times outside of the requested range.
+        for name in names:
+            datadict[name] = datadict[name][valid_indices]
+
+        # One all relevant data is read, convert the dictionary into the dataframe.
+        return pd.DataFrame(datadict, copy=False)
 
     @staticmethod
     def separate_packetids(df: pd.DataFrame) -> dict[int, pd.DataFrame]:
         """
-        Here we separate the data for different packet IDs. 
+        Here we separate the data for different packet IDs.
 
         ```md
         |-----------|--------------------------|

@@ -19,16 +19,15 @@ what most users need.  If you need to download data files, using the
 appropriate `IndexFile` class is much better.
 """
 
-import urllib.request
 import urllib.error
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Optional
 
 from junopy import config
 
-
-DEFAULT_CHUNK_SIZE = 16 * 1024 * 1024
+DEFAULT_CHUNK_SIZE = 32 * 1024 * 1024
 
 
 def download_file(
@@ -80,6 +79,14 @@ def download_file(
                         progress = (downloaded_bytes / total_bytes) * 100
                         print(f"Downloading... {progress:.1f}%", end="\r")
 
+            if total_bytes != downloaded_bytes:
+                raise Exception(
+                    "Download incomplete. "
+                    f"{downloaded_bytes} of {total_bytes} bytes downloaded. "
+                    "This error is usually a result of a PDS server limit. "
+                    " Try downloading using the 'zip' option."
+                )
+
         # Move temp file to final destination
         tmp_file.replace(output_file)
         if show_progress:
@@ -90,13 +97,13 @@ def download_file(
         print(f"\nFailed to download {url}: {e}")
         if tmp_file.exists():
             tmp_file.unlink()  # Clean up temp file
-        return False
+        raise
 
     except Exception as e:
         print(f"\nUnexpected error downloading {url}: {e}")
         if tmp_file.exists():
             tmp_file.unlink()  # Clean up temp file
-        return False
+        raise
 
 
 def download_multiple_files(

@@ -298,7 +298,7 @@ class JadeBinaryData(object):
         | 142       | Electron high-rate       |
         | 104       | E-060 low-rate           |
         | 106       | E-180 low-rate           |
-        | 107       | E-270 low-rate           |
+        | 107       | E-300 low-rate           |
         | 128-135   | Ion Species data (0..7)  |
         | 105       | Ion TOF high-rate        |
         | 121       | Ion TOF low-rate         |
@@ -314,10 +314,9 @@ class JadeBinaryData(object):
         """
         df_out = {}
         for pid in df["PACKETID"].unique():
-            if pid == 142:  # Handle electron HRS data separately
+            if pid == 142:  # Handle electron HRS data separately.
                 d = JadeBinaryData.create_dict_from_df(df[df["PACKETID"] == pid])
-
-                num_sensors = d["DATA"].shape[0] // 16
+                num_sensors = d["DATA"].shape[-1] // 16
                 if num_sensors == 2:
                     sensors = {104: d.copy(), 106: d.copy()}
                 elif num_sensors == 3:
@@ -328,8 +327,9 @@ class JadeBinaryData(object):
                 for i, sensor in enumerate(sensors):
                     dict_sensor = sensors[sensor]
                     for k in dict_sensor.keys():
-                        if dict_sensor[k].ndim > 1 and dict_sensor[k].shape[0] > 3:
-                            dict_sensor[k] = dict_sensor[k][16 * i : 16 * (i + 1), :, :]
+                        if dict_sensor[k].ndim > 1 and dict_sensor[k].shape[-1] > 3:
+                            dict_sensor[k] = dict_sensor[k][:, :, 16 * i : 16 * (i + 1)]
+                            # shape (ntimes, nenergies, ndirs)
 
                     df_out[sensor] = JadeBinaryData.create_df_from_dict(
                         dict_sensor, dict_sensor["DIM0_UTC"]
@@ -355,7 +355,9 @@ class JadeBinaryData(object):
         """
         data_dict = {}
         for key in df.keys():
-            data_dict[key] = np.stack(df[key]).T
+            data_dict[key] = np.stack(df[key])
+
+        data_dict["DIM0_UTC"] = df.index
 
         return data_dict
 

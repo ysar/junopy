@@ -1,15 +1,16 @@
 # Copyright (c) 2018 Yash Sarkango
 # Licensed under the MIT License
 
-import numpy as np
-import pandas as pd
 import datetime as dt
 from copy import deepcopy
-from scipy.constants import m_e, e
 
-from .read import JadeBinaryData
-from . import calib
+import numpy as np
+import pandas as pd
+from scipy.constants import e, m_e
+
 from .. import mag
+from . import calib
+from .read import JadeBinaryData
 
 
 def _create_energy_bins(energies: np.ndarray) -> np.ndarray:
@@ -94,11 +95,11 @@ class SensorData(object):
 
         if is_high_res:
             _F = calib._calc_anode_correction_F(sensor_const)[
-                :, np.newaxis, np.newaxis
-            ]  # shape (16, nE, nTime)
+                np.newaxis, np.newaxis, :
+            ]  # shape (nTime, nE, 16)
             _D = calib._calc_deflection_correction_D(
                 delta, sensor_const
-            )  # shape (16, nE, nTime)
+            )  # shape (nTime, nE, 16)
         else:
             _F = _D = 1.0
 
@@ -106,7 +107,7 @@ class SensorData(object):
         for i in range(len(times)):
             tau[i] = calib._calc_time_correction_tau(times[i], sensor_const)
 
-        tau = tau[np.newaxis, np.newaxis, :]  # shape (16, nE, nTime)
+        tau = tau[:, np.newaxis, np.newaxis]  # shape (nTime, nE, 16)
 
         _geometric_factor_sim = calib._calc_simulation_geom_factor(energies)
         _x = calib._calc_sensor_dependence_exp(sensor_const, energies)
@@ -220,29 +221,31 @@ class SensorData(object):
             By = magdata["By"].values
             Bz = magdata["Bz"].values
 
+        # fmt: off
         self.data_raw["PITCH_ANGLE"] = (
             np.arccos(
                 -(
-                    np.cos(elevation) * np.cos(azimuth) * Bx
-                    + np.cos(elevation) * np.sin(azimuth) * By
-                    + np.sin(elevation) * Bz
+                    np.cos(elevation) * np.cos(azimuth) * Bx[:, np.newaxis, np.newaxis]
+                    + np.cos(elevation) * np.sin(azimuth) * By[:, np.newaxis, np.newaxis]
+                    + np.sin(elevation) * Bz[:, np.newaxis, np.newaxis]
                 )
             )
             * 180
             / np.pi
         )
+        # fmt: on
 
     def rebin_sensor_data(
         self,
         min_energy: float | None = None,
         max_energy: float | None = None,
-        min_pitchangle: float = 0.,
-        max_pitchangle: float = 180.,
+        min_pitchangle: float = 0.0,
+        max_pitchangle: float = 180.0,
         num_pitchangle_bins: int = 12,
         add_background: bool = False,
     ):
         """
-        Rebin the sensor data from (nLookDir, nE, nTime) -> (nPA, nE, nTime).
+        Rebin the sensor data from (nTime, nE, nLookDir) -> (nTime, nE, nPA).
         This is useful for averaging later on. This method creates a new data
         array `dataR` and `uncertaintyR` in the object to hold the rebinned
         data. This method works with both LRS data (whose first axis is look-direction)
@@ -291,16 +294,18 @@ class SensorData(object):
         energy_bins = _create_energy_bins(_energies)
         num_energy_bins = len(energy_bins) - 1
 
-        pitchangle_bins = np.linspace(min_pitchangle, max_pitchangle, num_pitchangle_bins + 1)
+        pitchangle_bins = np.linspace(
+            min_pitchangle, max_pitchangle, num_pitchangle_bins + 1
+        )
 
         # Create masks -
         # 1. Mask invalid pitch angle values (fortunately this is only on one axis)
         # 2. Mask any NaN values prior to averaging
 
-        data_rebinned = np.zeros((num_pitchangle_bins, num_energy_bins, data.shape[2]))
-        uncertainty_rebinned = np.zeros(
-            (num_pitchangle_bins, num_energy_bins, data.shape[2])
-        )
+        num_times = data.shape[0]
+        new_shape = (num_times, num_energy_bins, num_pitchangle_bins)
+        data_rebinned = np.zeros(new_shape)
+        uncertainty_rebinned = np.zeros(new_shape)
 
         nan_mask = ~np.isnan(data)
         sigma_mask = ~np.isnan(uncertainty)
@@ -311,13 +316,13 @@ class SensorData(object):
             )
             mask = pitchangle_mask & nan_mask
             with np.errstate(divide="ignore", invalid="ignore"):
-                data_rebinned[i, :, :] = np.sum(data * mask, axis=0) / np.sum(
-                    mask, axis=0
+                data_rebinned[:, :, i] = np.sum(data * mask, axis=-1) / np.sum(
+                    mask, axis=-1
                 )
 
-                uncertainty_rebinned[i, :, :] = np.sum(
-                    uncertainty**2 * mask * sigma_mask, axis=0
-                ) / np.sum(mask * sigma_mask, axis=0)
+                uncertainty_rebinned[:, :, i] = np.sum(
+                    uncertainty**2 * mask * sigma_mask, axis=-1
+                ) / np.sum(mask * sigma_mask, axis=-1)
 
         data_rebinned[data_rebinned == 0.0] = np.nan
 
@@ -357,7 +362,7 @@ class SensorData(object):
             weights = np.zeros(len(pitchangle_bins) - 1) + 1.0
 
         # We do this for numpy broadcasting magic
-        weights = weights[:, np.newaxis, np.newaxis]
+        weights = weights[np.newaxis, np.newaxis, :]
 
         nanmask = ~np.isnan(self.data_rebinned)
         self.data_rebinned[~nanmask] = 0.0
@@ -370,15 +375,15 @@ class SensorData(object):
 
         with np.errstate(divide="ignore", invalid="ignore"):
             energy_spectra = np.sum(
-                self.data_rebinned * weights * nanmask, axis=0
-            ) / np.sum(weights * nanmask, axis=0)
+                self.data_rebinned * weights * nanmask, axis=-1
+            ) / np.sum(weights * nanmask, axis=-1)
 
         energy_spectra[energy_spectra == 0.0] = np.nan
 
         self.energy_spectra = pd.DataFrame(
             index=self.times,
             columns=[f"Ebin_{x}" for x in range(len(self.energy_bins) - 1)],
-            data=energy_spectra.T,
+            data=energy_spectra,
         )
 
     def calc_pitch_angle_spectra(self, weigh_energy: bool = True):
@@ -418,7 +423,7 @@ class SensorData(object):
             columns=[
                 "PAbin_{:d}".format(x) for x in range(len(self.pitchangle_bins) - 1)
             ],
-            data=pitchangle_spectra.T,
+            data=pitchangle_spectra,
         )
 
     def calc_accumulation_time_seconds(self):
@@ -460,11 +465,11 @@ class SensorData(object):
         x.times = x.times[indices]
 
         for key in ["DATA", "DATA_SIGMA", "BACKGROUND", "BACKGROUND_SIGMA"]:
-            x.data_raw[key] = x.data_raw[key][:, :, indices]
+            x.data_raw[key] = x.data_raw[key][indices, :, :]
 
         x.accumulation_time = x.accumulation_time[indices]
 
-        x.geom_factor_eff = x.geom_factor_eff[:, :, indices]
+        x.geom_factor_eff = x.geom_factor_eff[indices, :, :]
 
         try:
             x.energy_spectra = x.energy_spectra.iloc[indices].copy()
@@ -473,9 +478,9 @@ class SensorData(object):
             pass
 
         try:
-            x.data_rebinned = x.data_rebinned[:, :, indices]
-            x.uncertainty_rebinned = x.uncertainty_rebinned[:, :, indices]
+            x.data_rebinned = x.data_rebinned[indices, :, :]
+            x.uncertainty_rebinned = x.uncertainty_rebinned[indices, :, :]
         except AttributeError:
-            pass
+            pass  # ??? what is this. Why do we expect AttributeErrors?
 
         return x

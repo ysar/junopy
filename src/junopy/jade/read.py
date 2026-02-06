@@ -28,7 +28,6 @@ reading the .DAT (uncompressed) file is also possible.
 import datetime as dt
 import logging
 import re
-import struct
 from pathlib import Path
 
 import numpy as np
@@ -63,7 +62,7 @@ def read_jade_lbl_file(lblfile: Path) -> tuple[pd.DataFrame, int]:
         num_records (int): Total number of records in the .DAT file.
     """
     logging.debug(f"Reading JADE label file - {str(lblfile)}")
-    df_label = pd.DataFrame(columns=["name", "dataID-np", "nDim", "shape"])
+    df_label = pd.DataFrame(columns=["name", "python_dtype", "num_dimensions", "shape"])
 
     with open_file(lblfile, "rt") as f:
         i = 0
@@ -82,16 +81,28 @@ def read_jade_lbl_file(lblfile: Path) -> tuple[pd.DataFrame, int]:
 
                 a = line.strip()[3:-3].split(",")[1:]
                 df_label.at[i, "name"] = a[0].strip()
-                df_label.at[i, "dataID-np"] = a[1].strip()
-                df_label.at[i, "nDim"] = int(a[2].strip())
+                df_label.at[i, "python_dtype"] = a[1].strip()
+                df_label.at[i, "num_dimensions"] = int(a[2].strip())
                 df_label.at[i, "shape"] = np.array([int(x) for x in a[3:]])
                 i += 1
 
-    df_label["dataID-np"] = df_label["dataID-np"].replace("c", "s")
+    def _convert_python_numpy_type(x):
+        py_type = x["python_dtype"]
 
-    df_label["nbytes"] = df_label.apply(
-        lambda x: np.prod(x["shape"]) * struct.calcsize(x["dataID-np"]), axis=1
+        if py_type == "c":
+            return np.dtype(f"S{x['shape']}")
+        elif x["num_dimensions"] > 1:
+            return np.dtype((py_type, np.prod(x["shape"])))
+        elif x["shape"] > 1:
+            return np.dtype((py_type, x["shape"]))
+        else:
+            return np.dtype(py_type)
+
+    df_label["numpy_dtype"] = df_label.apply(
+        lambda x: _convert_python_numpy_type(x), axis=1
     )
+
+    df_label["num_bytes"] = df_label.apply(lambda x: x["numpy_dtype"].itemsize, axis=1)
 
     return df_label, num_records
 
@@ -168,27 +179,16 @@ class JadeBinaryData(object):
         )
 
         for i, column in df_label.iloc[1:].iterrows():
-            # Skips the first column (DIM0_UTC) since we already processed it while reading in the
-            # file.
-            if column["dataID-np"] == "s":
+            # Skips the first column (DIM0_UTC) since we already processed it.
+            if column["python_dtype"] == "c":
                 df[column["name"]] = df[column["name"]].apply(
-                    lambda x: x[0].decode("UTF-8").strip()
+                    lambda x: x.decode("UTF-8").strip()
                 )
 
-            elif column["nDim"] > 1:
+            elif column["num_dimensions"] > 1:
                 df[column["name"]] = df[column["name"]].apply(
                     lambda x: np.array(x).reshape(column["shape"])
                 )
-
-            elif column["nDim"] == 1 and column["shape"] == 1:
-                df[column["name"]] = df[column["name"]].apply(lambda x: x[0])
-
-        # df["time"] = pd.Series(
-        #     map(lambda x: dt.datetime.strptime(x, "%Y-%jT%H:%M:%S.%f"), df["DIM0_UTC"])
-        # )
-        df["time"] = df["DIM0_UTC"]
-
-        df.set_index("time", inplace=True)
 
         return df
 
@@ -221,67 +221,80 @@ class JadeBinaryData(object):
             reshaped later).
         """
         logging.debug(f"Reading JADE binary file - {filename}")
-        # data = pd.DataFrame(columns=df_label["name"].to_list())
+
+        dtype_records_without_time = np.dtype(
+            [(x["name"], x["numpy_dtype"]) for _, x in df_label.iloc[1:].iterrows()]
+        )
 
         # We will create numpy arrays to store data and then copy over the array to
         # the DataFrame. This is much faster than using .at() or .loc().
-        datadict = {}
-        for i, col in df_label.iterrows():
-            datadict[col["name"]] = np.empty(shape=(num_records,), dtype="object")
+        times = np.empty(shape=(num_records,), dtype=object)
+        data = np.empty(
+            shape=(num_records,),
+            dtype=dtype_records_without_time,
+        )
 
-        # Pre-making these lists is much faster than using .iterrows().
-        n = [np.prod(x) for x in df_label["shape"]]
-        fmt = df_label["dataID-np"].to_list()
-        nbytes = df_label["nbytes"].to_list()
-        names = df_label["name"].to_list()
-
-        # Loop over every record (i) and every column (j)
-        # Unfortunately, so far I have not discovered a way to vectorize this.
-
-        f = open_file(filename, "rb")
-
-        def __read_record_item(f, num_bytes, num_shape, fmt):
+        def __read_record(f, num_bytes):
             # Read one item in the record.
             readdata = f.read(num_bytes)
-            return struct.unpack(f"{num_shape}{fmt}", readdata)
+            if len(readdata) != num_bytes:
+                print(len(readdata), num_bytes_per_record)
+            return np.frombuffer(readdata, dtype=dtype_records_without_time)
 
-        def __read_utc_time(f, num_bytes, num_shape, fmt):
+        def __read_utc_time(f, num_bytes):
             # Read the UTC time that marks the beginning of each record.
-            val = __read_record_item(f, num_bytes, num_shape, fmt)
+            readdata = f.read(num_bytes)
+            val = np.frombuffer(readdata, df_label.at[0, "numpy_dtype"])
             return dt.datetime.strptime(
                 val[0].decode("UTF-8").strip(), "%Y-%jT%H:%M:%S.%f"
             )
 
-        num_bytes_to_skip = df_label["nbytes"].sum() - nbytes[0]
+        num_bytes_utc = df_label["num_bytes"].iat[0]
+        num_bytes_per_record = df_label["num_bytes"].sum() - num_bytes_utc
         valid_indices = []
 
-        for i in range(num_records):
-            t = __read_utc_time(f, nbytes[0], n[0], fmt[0])
+        with open_file(filename, "rb") as f:
+            try:
+                for i in range(num_records):
+                    t = __read_utc_time(f, num_bytes_utc)
 
-            if start and t < start:
-                # Need to skip the rest of the records but advance the file pointer.
-                # Here "1" means skip from the current file position.
-                f.seek(num_bytes_to_skip, 1)
-                continue
+                    if start and t < start:
+                        # If the time for this record is before the time requested,
+                        # skip the rest of the records but advance the file pointer.
+                        # Here "1" means skip from the current file position.
+                        f.seek(num_bytes_per_record, 1)
+                        continue
 
-            if stop and t > stop:
-                # If we have gone beyond what is required, we can close the file.
+                    if stop and t > stop:
+                        # If we have gone beyond what is required, we can close the file.
+                        f.close()
+                        break
+
+                    valid_indices.append(i)
+                    times[i] = t
+
+                    # Read the rest of the data for this record.
+                    data[i] = __read_record(f, num_bytes_per_record)
+
+            except ValueError:
+                # There is a strange error that comes up occasionally -
+                # "ValueError: buffer size must be a multiple of element size"
+                # Upon checking this occurs somewhere in the middle of the file.
+                # The data that is read until this point seems alright, so this
+                # is quite puzzling. Is the data stored on PDS incomplete or
+                # corrupted?
                 f.close()
-                break
-
-            valid_indices.append(i)
-            datadict[names[0]][i] = t
-
-            # Read the rest of the data for this record.
-            for j in range(1, len(df_label)):
-                datadict[names[j]][i] = __read_record_item(f, nbytes[j], n[j], fmt[j])
 
         # Remove invalid indices that correspond to times outside of the requested range.
-        for name in names:
-            datadict[name] = datadict[name][valid_indices]
+        data_out = dict()
+
+        for name in df_label.loc[1:, "name"]:
+            data_out[name] = data[name][valid_indices]
 
         # One all relevant data is read, convert the dictionary into the dataframe.
-        return pd.DataFrame(datadict, copy=False)
+        return JadeBinaryData.create_df_from_dict(
+            data_out, times[valid_indices].tolist()
+        )
 
     @staticmethod
     def separate_packetids(df: pd.DataFrame) -> dict[int, pd.DataFrame]:
@@ -328,7 +341,9 @@ class JadeBinaryData(object):
                         if dict_sensor[k].ndim > 1 and dict_sensor[k].shape[0] > 3:
                             dict_sensor[k] = dict_sensor[k][16 * i : 16 * (i + 1), :, :]
 
-                    df_out[sensor] = JadeBinaryData.create_df_from_dict(dict_sensor)
+                    df_out[sensor] = JadeBinaryData.create_df_from_dict(
+                        dict_sensor, dict_sensor["DIM0_UTC"]
+                    )
 
             else:
                 df_out[pid] = df[df["PACKETID"] == pid]
@@ -355,7 +370,7 @@ class JadeBinaryData(object):
         return data_dict
 
     @staticmethod
-    def create_df_from_dict(d: dict) -> pd.DataFrame:
+    def create_df_from_dict(d: dict, times: list[dt.datetime]) -> pd.DataFrame:
         """
         Creates a DataFrame from a dict. This method is the reverse of the
         `create_dict_from_df` method.
@@ -363,16 +378,16 @@ class JadeBinaryData(object):
         Args:
             d (dict): A dictionary with keys as the column names and values
                 as numpy arrays. Each array is stacked along the first axis.
+            times (list[dt.datetime]): List of datetimes to serve as the index
+                for the DataFrame.
         Returns:
             df (pandas.DataFrame): DataFrame containing the data from the dict.
         """
-        times = pd.to_datetime(d["DIM0_UTC"], format="%Y-%jT%H:%M:%S.%f")
         df = pd.DataFrame(index=times, columns=d.keys(), dtype=object)
-
         for key in d.keys():
             if d[key].ndim > 1:
-                df[key] = list(d[key].T)
+                df.loc[:, key] = list(d[key])
             else:
-                df[key] = d[key]
+                df.loc[:, key] = d[key]
 
         return df

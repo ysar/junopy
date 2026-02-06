@@ -254,36 +254,26 @@ class JadeBinaryData(object):
         valid_indices = []
 
         with open_file(filename, "rb") as f:
-            try:
-                for i in range(num_records):
-                    t = __read_utc_time(f, num_bytes_utc)
+            for i in range(num_records):
+                t = __read_utc_time(f, num_bytes_utc)
 
-                    if start and t < start:
-                        # If the time for this record is before the time requested,
-                        # skip the rest of the records but advance the file pointer.
-                        # Here "1" means skip from the current file position.
-                        f.seek(num_bytes_per_record, 1)
-                        continue
+                if start and t < start:
+                    # If the time for this record is before the time requested,
+                    # skip the rest of the records but advance the file pointer.
+                    # Here "1" means skip from the current file position.
+                    f.seek(num_bytes_per_record, 1)
+                    continue
 
-                    if stop and t > stop:
-                        # If we have gone beyond what is required, we can close the file.
-                        f.close()
-                        break
+                if stop and t > stop:
+                    # If we have gone beyond what is required, we can close the file.
+                    f.close()
+                    break
 
-                    valid_indices.append(i)
-                    times[i] = t
+                valid_indices.append(i)
+                times[i] = t
 
-                    # Read the rest of the data for this record.
-                    data[i] = __read_record(f, num_bytes_per_record)
-
-            except ValueError:
-                # There is a strange error that comes up occasionally -
-                # "ValueError: buffer size must be a multiple of element size"
-                # Upon checking this occurs somewhere in the middle of the file.
-                # The data that is read until this point seems alright, so this
-                # is quite puzzling. Is the data stored on PDS incomplete or
-                # corrupted?
-                f.close()
+                # Read the rest of the data for this record.
+                data[i] = __read_record(f, num_bytes_per_record)
 
         # Remove invalid indices that correspond to times outside of the requested range.
         data_out = dict()

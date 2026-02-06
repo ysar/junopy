@@ -64,7 +64,7 @@ def download_file(
     try:
         # Open URL connection
         with urllib.request.urlopen(url) as response:
-            total_bytes = int(response.headers.get("Content-Length", 0))
+            total_bytes = int(response.headers.get("Content-Length", None))
 
             # Download in chunks
             with open(tmp_file, "wb") as f:
@@ -75,11 +75,11 @@ def download_file(
                     f.write(chunk)
                     downloaded_bytes += len(chunk)
 
-                    if show_progress and total_bytes > 0:
+                    if show_progress and total_bytes:
                         progress = (downloaded_bytes / total_bytes) * 100
                         print(f"Downloading... {progress:.1f}%", end="\r")
 
-            if total_bytes != downloaded_bytes:
+            if total_bytes and total_bytes != downloaded_bytes:
                 raise Exception(
                     "Download incomplete. "
                     f"{downloaded_bytes} of {total_bytes} bytes downloaded. "

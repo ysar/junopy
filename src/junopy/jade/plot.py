@@ -1,12 +1,14 @@
 # Copyright (c) 2018 Yash Sarkango
 # Licensed under the MIT License
 
-import numpy as np
 import datetime as dt
-import pandas as pd
+
 import matplotlib as mpl
-from matplotlib import cm
-from matplotlib import colors
+import numpy as np
+import pandas as pd
+from matplotlib import cm, colors
+
+from junopy.utils import misc
 
 from .sensor import SensorData
 
@@ -55,13 +57,10 @@ def plot_timeseries_spectra(
     #     if (time_bins[i + 1] - time_bins[i]).total_seconds() > 301:
     #         z[:, i] = np.nan
 
-    if not vmin and not vmax:
-
-        def get_percentile(arr, p):
-            return np.exp(np.percentile(np.log(arr[arr > 0 & ~np.isnan(arr)]), p))
-
-        vmin = get_percentile(z, 1)
-        vmax = get_percentile(z, 99)
+    if not vmin:
+        vmin = misc.get_percentile(z, 1)
+    if not vmax:
+        vmax = misc.get_percentile(z, 99)
 
     norm = colors.LogNorm(vmin=vmin, vmax=vmax)
 
@@ -125,13 +124,10 @@ def plot_energy_pa_spectra(
     else:
         norm = colors.LogNorm
 
-    if not vmin and not vmax:
-
-        def get_percentile(arr, p):
-            return np.exp(np.percentile(np.log(arr[arr > 0 & ~np.isnan(arr)]), p))
-
-        vmin = get_percentile(z, 1)
-        vmax = get_percentile(z, 99)
+    if not vmin:
+        vmin = misc.get_percentile(z, 1)
+    if not vmax:
+        vmax = misc.get_percentile(z, 99)
 
     mp = ax.pcolormesh(
         sensor_data.pitchangle_bins,
@@ -207,13 +203,10 @@ def plot_anode_energy_time_spectra(
         d = sensor_data.data_raw["DATA"] / sensor_data.data_raw["BACKGROUND"]
 
     if not data == "pitchangle":
-        if not vmin and not vmax:
-
-            def get_percentile(arr, p):
-                return np.exp(np.percentile(np.log(arr[arr > 0 & ~np.isnan(arr)]), p))
-
-            vmin = get_percentile(d, 1)
-            vmax = get_percentile(d, 99)
+        if not vmin:
+            vmin = misc.get_percentile(d, 1)
+        if not vmax:
+            vmax = misc.get_percentile(d, 99)
 
         norm = colors.LogNorm(vmin=vmin, vmax=vmax)
     else:

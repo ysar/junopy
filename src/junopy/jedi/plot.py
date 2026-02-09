@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 from matplotlib import axes, collections, colors
 
+from junopy.utils import misc
+
 
 def plot_energy_spectra_ssd_native(
     df: pd.DataFrame,
@@ -28,13 +30,11 @@ def plot_energy_spectra_ssd_native(
     z = np.zeros((z_in.shape[0] * 2 - 1, z_in.shape[1])) * np.nan
     z[::2, :] = z_in
 
-    if not vmin and not vmax:
+    if not vmin:
+        vmin = misc.get_percentile(z, 1)
 
-        def get_percentile(arr, p):
-            return np.exp(np.percentile(np.log(arr[arr > 0 & ~np.isnan(arr)]), p))
-
-        vmin = get_percentile(z, 1)
-        vmax = get_percentile(z, 99)
+    if not vmax:
+        vmax = misc.get_percentile(z, 99)
 
     norm = colors.LogNorm(vmin=vmin, vmax=vmax)
 
@@ -98,13 +98,11 @@ def plot_timeseries_spectra(
     #     if (time_bins[i + 1] - time_bins[i]).total_seconds() > 301:
     #         z[:, i] = np.nan
 
-    if not vmin and not vmax:
+    if not vmin:
+        vmin = misc.get_percentile(z, 1)
 
-        def get_percentile(arr, p):
-            return np.exp(np.percentile(np.log(arr[arr > 0 & ~np.isnan(arr)]), p))
-
-        vmin = get_percentile(z, 1)
-        vmax = get_percentile(z, 99)
+    if not vmax:
+        vmax = misc.get_percentile(z, 99)
 
     norm = colors.LogNorm(vmin=vmin, vmax=vmax)
 

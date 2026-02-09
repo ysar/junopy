@@ -142,3 +142,18 @@ def cxcs_Hplus_Splusplus(energy: float) -> float:
         float: Cross-section of the reaction in cm^2
     """
     return 6e-18 / 1e-16
+
+
+def get_percentile(arr: np.ndarray, p: float):
+    """
+    Returns the log-percentile of an input array after discounting the zero
+    values and NaNs.
+
+    Args:
+        arr (np.ndarray): The input array of any shape.
+        p (float): The percentile between 0-100.
+
+    Returns:
+        result (float): The log-percentile of the input array.
+    """
+    return np.exp(np.percentile(np.log(arr[arr > 0 & ~np.isnan(arr)]), p))

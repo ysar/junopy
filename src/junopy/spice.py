@@ -1,6 +1,3 @@
-# Copyright (c) 2018 Yash Sarkango
-# Licensed under the MIT License
-
 """
 Module to work with Juno SPICE kernels.
 """

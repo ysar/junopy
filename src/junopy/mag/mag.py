@@ -1,21 +1,16 @@
-# Copyright (c) 2018 Yash Sarkango
-# Licensed under the MIT License
-
-import datetime as dt
-import numpy as np
-import pandas as pd
 import copy
-import spiceypy
+import datetime as dt
 import logging
 from functools import reduce
-
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any, Optional
+
+import numpy as np
+import pandas as pd
+import spiceypy
 from matplotlib import axes
 
-from junopy import spice
-from junopy import index
-from junopy import utils
+from junopy import index, spice, utils
 
 
 class MagData(object):

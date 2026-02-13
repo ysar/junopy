@@ -1,15 +1,13 @@
-# Copyright (c) 2018 Yash Sarkango
-# Licensed under the MIT License
 """Module to work with INDEX.TAB files present in the PDS3 archive."""
 
 import logging
-import pandas as pd
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-from junopy import config
-from junopy import utils
-from junopy.constants import DATA_IDS, PDS_URL, EXTENSIONS, TIME_FORMATS
+import pandas as pd
+
+from junopy import config, utils
+from junopy.constants import DATA_IDS, EXTENSIONS, PDS_URL, TIME_FORMATS
 
 
 class IndexFile:

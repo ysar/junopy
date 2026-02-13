@@ -1,9 +1,6 @@
-# Copyright (c) 2018 Yash Sarkango
-# Licensed under the MIT License
-
 import logging
-from typing import Dict
 from pathlib import Path
+from typing import Dict
 
 
 class ConfigVars:

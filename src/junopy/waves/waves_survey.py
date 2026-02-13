@@ -1,15 +1,12 @@
-# Copyright (c) 2018 Yash Sarkango
-# Licensed under the MIT License
+import datetime as dt
+import logging
+from pathlib import Path
+from typing import Optional
 
+import matplotlib.colors as colors
 import numpy as np
 import pandas as pd
-import datetime as dt
-import matplotlib.colors as colors
-import logging
-
-from pathlib import Path
 from matplotlib import axes
-from typing import Optional
 
 from junopy import index
 

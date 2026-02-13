@@ -1,5 +1,3 @@
-# Copyright (c) 2018 Yash Sarkango
-# Licensed under the MIT License
 """
 This submodule contains code to calculate the geometric factor for the different
 JADE sensors, following the supporting information of Allegrini et al.
@@ -25,8 +23,9 @@ a function of time/date. `D(delta)` depends on deflection angle and sensor.
 
 """
 
-import numpy as np
 import datetime as dt
+
+import numpy as np
 
 
 class ElectronSensorConstants:
@@ -50,8 +49,8 @@ class ElectronSensorConstants:
         f: float = np.nan,
     ):
         """
-        Initialize the constants for a JADE electron sensor.  These constants are 
-        related to the sensitivity and calibration of the sensor and can be 
+        Initialize the constants for a JADE electron sensor.  These constants are
+        related to the sensitivity and calibration of the sensor and can be
         used to calculate the effective geometric factor.
 
         Attributes:

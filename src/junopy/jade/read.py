@@ -1,5 +1,3 @@
-# Copyright (c) 2018 Yash Sarkango
-# Licensed under the MIT License
 """
 This module can be used to read level-3 data files from the JADE instrument.
 
@@ -353,7 +351,7 @@ class JadeBinaryData(object):
             data_dict (dict): A dictionary with keys as the column names and values
                 as numpy arrays. Each array is stacked along the first axis.
         """
-        data_dict = {}
+        data_dict = dict()
         for key in df.keys():
             data_dict[key] = np.stack(df[key])
 

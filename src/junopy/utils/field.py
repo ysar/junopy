@@ -1,18 +1,3 @@
-# junopy - A Python API for the Juno spacecraft's particle and fields datasets.
-# Copyright (C) 2018  Yash Sarkango
-
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 Methods to work with Jupiter's magnetic field models to calculate the
 equatorial pitch-angle, M-shell, etc. using JupiterMag.
@@ -153,3 +138,35 @@ class JunoFieldTrace:
         self.df["losscone_eq"] = (
             np.arcsin(np.sqrt(self.df["b_min"] / self.df["b_max"])) * 180.0 / np.pi
         )
+
+
+# def get_model_field_at_times(
+#     times: list[dt.datetime],
+#     coordsystem="JUNO_JSS",
+#     internal_field=DEFAULT_INTERNAL_FIELD,
+#     external_field=DEFAULT_EXTERNAL_FIELD,
+# ) -> np.ndarray:
+#     """
+#     Returns the Jovian internal + current sheet field calculated at Juno's position at a given
+#     list of times.
+
+#     Args:
+#         times (list[dt.datetime]): List of times at which to calculate B.
+#         coordsystem (str): Coordinate system recognized by SPICE.
+#         internal_field (str): Internal field (default="jrm33")
+#         external_field (str): External field (default="con2020")
+#     """
+#     juno_position, _ = spice.get_juno_position(times, coordsystem="IAU_JUPITER")
+#     jm.Con2020.Config(equation_type="analytic")
+#     jm.Internal.Config(Model=internal_field, CartesianIn=True, CartesianOut=True)
+
+#     b_model_internal = np.array(
+#         jm.Internal.Field(juno_position[:, 0], juno_position[:, 1], juno_position[:, 2])
+#     )
+#     b_model_external = np.array(
+#         jm.Con2020.Field(juno_position[:, 0], juno_position[:, 1], juno_position[:, 2])
+#     )
+
+#     b_model = b_model_internal + b_model_external
+
+#     rotation_matrix = spice.calc_rotation_matrix(times, "IAU_JUPITER", coordsystem)

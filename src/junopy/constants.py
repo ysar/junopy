@@ -1,6 +1,3 @@
-# Copyright (c) 2018 Yash Sarkango
-# Licensed under the MIT License
-
 R_JUPITER = 71492  # km
 R_GANYMEDE = 2634  # km
 

@@ -1,10 +1,8 @@
-# Copyright (c) 2018 Yash Sarkango
-# Licensed under the MIT License
 import datetime as dt
-import pandas as pd
 import glob
-
 from pathlib import Path
+
+import pandas as pd
 
 PATTERNS = {
     "ELECTRONS": "S_ELC_",

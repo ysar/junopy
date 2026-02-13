@@ -1,29 +1,15 @@
-# junopy - A Python API for the Juno spacecraft's particle and fields datasets.
-# Copyright (C) 2018  Yash Sarkango
-
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 import datetime as dt
 
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
-from matplotlib import axes
-from matplotlib.patches import Ellipse
+from matplotlib import axes, colors
+from matplotlib.collections import PatchCollection
+from matplotlib.patches import Ellipse, Wedge
 
 from junopy import spice
 
-from . import convert
+from . import convert, misc
 
 # from . import field
 
@@ -70,6 +56,55 @@ def plot_jupiter(ax: axes.Axes, **kwargs):
     """
     jupiter = Ellipse((0.0, 0.0), 2.0, 2.0 * (1.0 - 1.0 / 15.4), **kwargs)
     ax.add_patch(jupiter)
+
+
+def plot_distribution_perp_parallel(
+    ax: mpl.axes.Axes,
+    energy_bins: np.ndarray,
+    pitchangle_bins: np.ndarray,
+    data: np.ndarray,
+    vmin: None | float = None,
+    vmax: None | float = None,
+    cmap: str = "turbo",
+) -> PatchCollection:
+    """
+    Given energy bins and pitch-angle bins, and 2D data, visualize the 2D
+    distribution function in perp and parallel coordinates.
+    """
+
+    if not vmin:
+        vmin = misc.get_percentile(data, 1)
+
+    if not vmax:
+        vmax = misc.get_percentile(data, 99)
+
+    def _get_patch(energy1, energy2, pa1, pa2):
+        return Wedge(
+            (0, 0),
+            np.log10(energy2),
+            pa1 - 90,
+            pa2 - 90,
+            width=(np.log10(energy2) - np.log10(energy1)),
+        )
+
+    patches = []
+    for i in range(len(energy_bins) - 1):
+        for j in range(len(pitchangle_bins) - 1):
+            patches.append(
+                _get_patch(
+                    energy_bins[i],
+                    energy_bins[i + 1],
+                    pitchangle_bins[j],
+                    pitchangle_bins[j + 1],
+                )
+            )
+
+    patch_collection = PatchCollection(patches)
+    patch_collection.set_array(data.T.ravel())
+    patch_collection.set_cmap(cmap)
+    patch_collection.set_norm(colors.LogNorm(vmin=vmin, vmax=vmax))
+    ax.add_collection(patch_collection)
+    return patch_collection
 
 
 # def find_ticks_between_Mshell(

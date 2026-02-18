@@ -19,6 +19,9 @@ from junopy import spice
 DEFAULT_INTERNAL_FIELD = "jrm33"
 DEFAULT_EXTERNAL_FIELD = "Con2020"
 
+# jm.Con2020.Config(equation_type="analytic")
+jm.Internal.Config(Model=DEFAULT_INTERNAL_FIELD, CartesianIn=True, CartesianOut=True)
+
 
 class JunoFieldTrace:
     def __init__(
@@ -140,33 +143,43 @@ class JunoFieldTrace:
         )
 
 
-# def get_model_field_at_times(
-#     times: list[dt.datetime],
-#     coordsystem="JUNO_JSS",
-#     internal_field=DEFAULT_INTERNAL_FIELD,
-#     external_field=DEFAULT_EXTERNAL_FIELD,
-# ) -> np.ndarray:
-#     """
-#     Returns the Jovian internal + current sheet field calculated at Juno's position at a given
-#     list of times.
+def get_model_field_at_times(
+    times: list[dt.datetime],
+    coordsystem="JUNO_JSS",
+    internal_field=DEFAULT_INTERNAL_FIELD,
+    external_field=DEFAULT_EXTERNAL_FIELD,
+) -> np.ndarray:
+    """
+    Returns the Jovian internal + current sheet field calculated at Juno's position at a given
+    list of times.
 
-#     Args:
-#         times (list[dt.datetime]): List of times at which to calculate B.
-#         coordsystem (str): Coordinate system recognized by SPICE.
-#         internal_field (str): Internal field (default="jrm33")
-#         external_field (str): External field (default="con2020")
-#     """
-#     juno_position, _ = spice.get_juno_position(times, coordsystem="IAU_JUPITER")
-#     jm.Con2020.Config(equation_type="analytic")
-#     jm.Internal.Config(Model=internal_field, CartesianIn=True, CartesianOut=True)
+    Args:
+        times (list[dt.datetime]): List of times at which to calculate B.
+        coordsystem (str): Coordinate system recognized by SPICE.
+        internal_field (str): Internal field (default="jrm33")
+        external_field (str): External field (default="con2020")
 
-#     b_model_internal = np.array(
-#         jm.Internal.Field(juno_position[:, 0], juno_position[:, 1], juno_position[:, 2])
-#     )
-#     b_model_external = np.array(
-#         jm.Con2020.Field(juno_position[:, 0], juno_position[:, 1], juno_position[:, 2])
-#     )
+    Returns:
+        b_model (np.ndarray): Magnetic field vector in `coordsystem` frame for each of the
+            requested times.
+    """
+    if internal_field != DEFAULT_INTERNAL_FIELD:
+        jm.Internal.Config(Model=internal_field, CartesianIn=True, CartesianOut=True)
 
-#     b_model = b_model_internal + b_model_external
+    juno_position, _ = spice.get_juno_position(times, coordsystem="IAU_JUPITER")
 
-#     rotation_matrix = spice.calc_rotation_matrix(times, "IAU_JUPITER", coordsystem)
+    num_times = len(times)
+    b_model_internal = np.empty((num_times, 3))
+    b_model_external = np.empty((num_times, 3))
+
+    b_model_internal = np.array(
+        jm.Internal.Field(juno_position[:, 0], juno_position[:, 1], juno_position[:, 2])
+    ).transpose()
+
+    b_model_external = np.array(
+        jm.Con2020.Field(juno_position[:, 0], juno_position[:, 1], juno_position[:, 2])
+    ).transpose()
+
+    b_model = b_model_internal + b_model_external
+    rotation_matrix = spice.calc_rotation_matrix(times, "IAU_JUPITER", coordsystem)
+    return np.matvec(rotation_matrix, b_model)

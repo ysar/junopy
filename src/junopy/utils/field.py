@@ -10,17 +10,14 @@ like M-shell, loss-cone, etc., using `JupiterMag`.
 
 import datetime as dt
 
-import JupiterMag as jm
+import iupitermag as im
 import numpy as np
 import pandas as pd
 
 from junopy import spice
 
-DEFAULT_INTERNAL_FIELD = "jrm33"
-DEFAULT_EXTERNAL_FIELD = "Con2020"
-
-# jm.Con2020.Config(equation_type="analytic")
-jm.Internal.Config(Model=DEFAULT_INTERNAL_FIELD, CartesianIn=True, CartesianOut=True)
+DEFAULT_INTERNAL_FIELD = "JRM33"
+DEFAULT_EXTERNAL_FIELD = "CON2020"
 
 
 class JunoFieldTrace:
@@ -42,17 +39,17 @@ class JunoFieldTrace:
                 obtained from tracing magnetic field lines.
         """
         self.times = times
-        self.internal_field = internal_field
-        self.external_field = external_field
 
-        jm.Con2020.Config(equation_type="analytic")
-        jm.Internal.Config(Model=internal_field, CartesianIn=True, CartesianOut=True)
+        self.internal_field = im.InternalField(internal_field)
+        self.external_field = im.CurrentSheetField(external_field)
+
         self.df = pd.DataFrame(
             index=times, columns=["m_shell", "b_min", "b_max"], data=np.nan
         )
 
         self._do_trace()
         self._calc_m_shell()
+        self._calc_b()
         self._calc_bmin_bmax()
         self._calc_loss_cone()
 
@@ -62,34 +59,36 @@ class JunoFieldTrace:
         `times` attribute for this class.
         """
         self.positions, _ = spice.get_juno_position(self.times, "IAU_JUPITER")
-        trace_analytic = jm.TraceField(
-            self.positions[:, 0],
-            self.positions[:, 1],
-            self.positions[:, 2],
-            IntModel=self.internal_field,
-            ExtModel=self.external_field,
+
+        self.traces = im.trace_field_to_planet(
+            self.positions, self.internal_field, self.external_field
         )
-        self._trace = trace_analytic.TraceDict()
 
     def _calc_m_shell(self):
         """
         Calculate Juno's M-shell and populate the `df` attribute for this class.
+
+        Note: This libraries defines M-shell as the maximum radial extent of the field line. This
+        is a reasonable assumption given the axial asymmetry of the field.
         """
         m_shell = np.full(len(self.times), np.nan)
         for i in range(len(self.times)):
-            b_mag = np.sqrt(
-                self._trace["Bx"][i] ** 2
-                + self._trace["By"][i] ** 2
-                + self._trace["Bz"][i] ** 2
-            )
-            rad = np.sqrt(
-                self._trace["x"][i] ** 2
-                + self._trace["y"][i] ** 2
-                + self._trace["z"][i] ** 2
-            )
-            m_shell[i] = rad[np.argmin(b_mag)]
+            rad = np.sqrt(np.sum(self.traces[i] ** 2, axis=1))
+            m_shell[i] = rad[np.argmax(rad)]
 
         self.df["m_shell"] = m_shell
+
+    def _calc_b(self):
+        """
+        Calculate the magnetic field vector for each point in each trace corresponding to times in
+        self.times.
+        """
+        self.traces_b = []
+        for i in range(len(self.times)):
+            self.traces_b.append(
+                self.internal_field.parmap_calc_field_xyz(self.traces[i])
+                + self.external_field.parmap_calc_field_xyz(self.traces[i])
+            )
 
     def _calc_bmin_bmax(self):
         """
@@ -99,11 +98,7 @@ class JunoFieldTrace:
         b_min = np.full(len(self.times), np.nan)
         b_max = np.full(len(self.times), np.nan)
         for i in range(len(self.times)):
-            b_mag = np.sqrt(
-                self._trace["Bx"][i] ** 2
-                + self._trace["By"][i] ** 2
-                + self._trace["Bz"][i] ** 2
-            )
+            b_mag = np.sqrt(np.sum(self.traces_b[i] ** 2, axis=1))
             b_min[i], b_max[i] = np.min(b_mag), np.max(b_mag)
 
         self.df["b_min"], self.df["b_max"] = b_min, b_max
@@ -115,26 +110,11 @@ class JunoFieldTrace:
         """
         b_local = np.full(len(self.times), np.nan)
 
-        for i in range(len(self.times)):
-            b_local_internal = jm.Internal.Field(
-                self.positions[i, 0],
-                self.positions[i, 1],
-                self.positions[i, 2],
-            )
+        b_local = self.internal_field.parmap_calc_field_xyz(
+            self.positions
+        ) + self.external_field.parmap_calc_field_xyz(self.positions)
 
-            b_local_external = jm.Con2020.Field(
-                self.positions[i, 0],
-                self.positions[i, 1],
-                self.positions[i, 2],
-            )
-
-            b_local[i] = np.sqrt(
-                (b_local_internal[0] + b_local_external[0]) ** 2
-                + (b_local_internal[1] + b_local_external[1]) ** 2
-                + (b_local_internal[2] + b_local_external[2]) ** 2
-            )
-
-        self.df["b_local"] = b_local
+        self.df["b_local"] = np.sqrt(np.sum(b_local**2, axis=1))
         self.df["losscone_local"] = (
             np.arcsin(np.sqrt(self.df["b_local"] / self.df["b_max"])) * 180.0 / np.pi
         )
@@ -163,22 +143,18 @@ def get_model_field_at_times(
         b_model (np.ndarray): Magnetic field vector in `coordsystem` frame for each of the
             requested times.
     """
-    if internal_field != DEFAULT_INTERNAL_FIELD:
-        jm.Internal.Config(Model=internal_field, CartesianIn=True, CartesianOut=True)
+    internal_field = im.InternalField(internal_field)
+    external_field = im.CurrentSheetField(external_field)
 
     juno_position, _ = spice.get_juno_position(times, coordsystem="IAU_JUPITER")
 
     num_times = len(times)
-    b_model_internal = np.empty((num_times, 3))
-    b_model_external = np.empty((num_times, 3))
-
-    b_model_internal = np.array(
-        jm.Internal.Field(juno_position[:, 0], juno_position[:, 1], juno_position[:, 2])
-    ).transpose()
-
-    b_model_external = np.array(
-        jm.Con2020.Field(juno_position[:, 0], juno_position[:, 1], juno_position[:, 2])
-    ).transpose()
+    if num_times > 20:
+        b_model_internal = internal_field.parmap_calc_field_xyz(juno_position)
+        b_model_external = external_field.parmap_calc_field_xyz(juno_position)
+    else:
+        b_model_internal = internal_field.map_calc_field_xyz(juno_position)
+        b_model_external = external_field.map_calc_field_xyz(juno_position)
 
     b_model = b_model_internal + b_model_external
     rotation_matrix = spice.calc_rotation_matrix(times, "IAU_JUPITER", coordsystem)

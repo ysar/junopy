@@ -115,9 +115,7 @@ def plot_distribution_perp_parallel(
 #     We would like to have :
 #     M shell, Latitude, SIII-Longitude
 #     """
-#     times = (
-#         pd.date_range(start=start, end=end, periods=nticks).to_pydatetime().tolist()
-#     )
+#     times = pd.date_range(start=start, end=end, periods=nticks).to_pydatetime().tolist()
 
 #     position, _ = spice.get_juno_position(times, coordsystem="IAU_JUPITER")
 #     position_mag, _ = spice.get_juno_position(times, coordsystem="JUNO_MAG_VIP4")

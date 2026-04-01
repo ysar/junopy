@@ -142,3 +142,27 @@ def get_percentile(arr: np.ndarray, p: float):
         result (float): The log-percentile of the input array.
     """
     return np.exp(np.percentile(np.log(arr[arr > 0 & ~np.isnan(arr)]), p))
+
+
+def bagenal_delamere_density(radius: np.ndarray):
+    """
+    Get the density using equation from Bagenal and Delamere (2011).
+
+    Args:
+        radius (np.ndarray): Numpy array with different radii.
+
+    Returns:
+        result (np.ndarray): Number densities in cm^-3 .
+    """
+    a1 = 1987.0
+    b1 = -8.2
+    a2 = 14.0
+    b2 = -3.2
+    a3 = 0.05
+    b3 = -0.65
+
+    return (
+        a1 * (radius / 6) ** (-b1)
+        + a2 * (radius / 6) ** (-b2)
+        + a3 * (radius / 6) ** (-b3)
+    )

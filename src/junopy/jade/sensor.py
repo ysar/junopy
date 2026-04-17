@@ -178,6 +178,7 @@ class SensorData(object):
                     # Phase space density [s3 cm-6]
                     speed_squared = 2 * self.data_raw["DIM1_E"] * q * e / m  # m2 s-2
                     self.data_raw[k] /= self.geom_factor_eff * 0.5e8 * speed_squared**2
+                    self.data_raw[k] = self.data_raw[k].astype("float64")
         else:
             raise NotImplementedError(
                 "Only conversion from `countrate` is implemented."

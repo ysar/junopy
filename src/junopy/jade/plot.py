@@ -110,10 +110,10 @@ def plot_energy_pa_spectra(
     if start and stop:
         indices = (sensor_data.times >= start) & (sensor_data.times <= stop)
     else:
-        indices = np.full((sensor_data.data_rebinned.shape[-1],), True)
+        indices = np.full((sensor_data.data_rebinned.shape[0],), True)
 
     # z data are spectral values
-    z = np.nanmean(sensor_data.data_rebinned[:, :, indices], axis=2).T
+    z = np.nanmean(sensor_data.data_rebinned[indices, :, :], axis=0).T
 
     if normalize_energy_bins:
         z = np.apply_along_axis(lambda x: (x - x.min()) / (x.max() - x.min()), 1, z)
@@ -215,7 +215,7 @@ def plot_anode_energy_time_spectra(
         for j in range(4):
             i_anode = 4 * i + j
             axs[i, j].set_facecolor("0.7")
-            axs[i, j].pcolormesh(time_bins, y, d[i_anode, :, :], norm=norm, cmap=cmap)
+            axs[i, j].pcolormesh(time_bins, y, d[:, :, i_anode], norm=norm, cmap=cmap)
             axs[i, j].set_yscale("log")
             axs[i, j].set_xlabel("Time")
             axs[i, j].set_ylabel("Energy [eV]")

@@ -107,6 +107,20 @@ def plot_distribution_perp_parallel(
     return patch_collection
 
 
+def annotate_axes_upper_left(ax, text):
+    ax.annotate(
+        text,
+        xy=(0, 1),
+        xycoords="axes fraction",
+        xytext=(6, -6),
+        textcoords="offset points",
+        va="top",
+        ha="left",
+        color="w",
+        bbox=dict(fc="k", ec="k"),
+    )
+
+
 # def find_ticks_between_Mshell(
 #     start, end, nticks=6, timeformat="%H:%M:%S", appendlabels=True
 # ):

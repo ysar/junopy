@@ -162,7 +162,33 @@ def bagenal_delamere_density(radius: np.ndarray):
     b3 = -0.65
 
     return (
-        a1 * (radius / 6) ** (-b1)
-        + a2 * (radius / 6) ** (-b2)
-        + a3 * (radius / 6) ** (-b3)
+        a1 * (radius / 6) ** (b1)
+        + a2 * (radius / 6) ** (b2)
+        + a3 * (radius / 6) ** (b3)
     )
+
+
+def bagenal_delamere_temperature(radius: np.ndarray, mass=1.0):
+    """
+    Get the temperature using equation from Bagenal and Delamere (2011).
+
+    Args:
+        radius (np.ndarray): Numpy array with different radii.
+
+    Returns:
+        result (np.ndarray): Number densities in cm^-3 .
+    """
+    # if radius < 5:
+    #     raise Exception("This profile is not valid below M=5")
+    # elif radius > 30:
+    #     return 4000
+
+    # T = beta * r^alpha
+    alpha = np.log(200.0) / 6.0
+    beta = 4000.0 / 30.0**alpha
+
+    temp = beta * radius**alpha
+
+    temp[radius < 5] = np.nan
+    temp[radius > 30.0] = 4000.0
+    return temp

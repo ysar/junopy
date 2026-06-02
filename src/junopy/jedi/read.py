@@ -265,8 +265,8 @@ class JediData:
         ]
 
         # Specify negative values as 0 or no-count
-        vals = self.data_raw.loc[:, channel_names].values
-        vals[vals < 0] = 0.0
+        vals = self.data_raw.loc[:, channel_names].values * 1.0
+        vals[vals < 0.0] = 0.0
         self.data_raw.loc[:, channel_names] = vals
 
         if len(self.metadata.index) % self.num_ssd == 0:

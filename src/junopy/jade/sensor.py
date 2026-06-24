@@ -74,43 +74,90 @@ class SensorData(object):
 
     def calc_geometric_factor_electrons(self, is_high_res=True):
         """
-        Calculate the effective geometric factor for the electron sensors.
-        This is done using the calibration functions in calib.py using the
-        equations described in the docstring of calib.py.
+        Calculate the geometric factor for JADE electrons using the equations defined in -
+        Allegrini et al. (2025) - https://doi.org/10.1029/2025JA034490
+
+        GeomFactorEff = G_simulations(E)  *  D(delta)  *  F(A, t)  *  epsilon(E, t)  * Tau(t)
+
+        So there are three terms that are time-dependent.
 
         Args:
             is_high_res (bool): Whether the data is high resolution or not. If True,
                 the anode and deflection corrections are applied. If False, they
                 are set to 1.
         """
+        if is_high_res:
+            self._calc_geometric_factor_electrons_highres()
+        else:
+            self._calc_geometric_factor_electrons_lowres()
+
+    def _calc_geometric_factor_electrons_highres(self):
+        """
+        Calculate geometric factors for high-res electron data.
+        """
 
         delta = self.data_raw["DIM2_ELEVATION"]
         energies = self.data_raw["DIM1_E"]
         times = self.times
 
-        sensor_const = calib._get_sensor_constants(self.id)
+        # fmt: off
+        if self.id == 104:
+            calc_time_dependent_sensitivity = calib._calc_time_dependent_sensitivity_e060
+            calc_time_dependent_detector_efficiency = calib._calc_time_dependence_detector_efficiency_e060
+            calc_mcp_efficiency = calib._calc_mcp_efficiency_e060
+        elif self.id == 106:
+            calc_time_dependent_sensitivity = calib._calc_time_dependent_sensitivity_e180
+            calc_time_dependent_detector_efficiency = calib._calc_time_dependence_detector_efficiency_e180
+            calc_mcp_efficiency = calib._calc_mcp_efficiency_e180
+        # fmt: on
 
-        if is_high_res:
-            _F = calib._calc_anode_correction_F(sensor_const)[
-                np.newaxis, np.newaxis, :
-            ]  # shape (nTime, nE, 16)
-            _D = calib._calc_deflection_correction_D(
-                delta, sensor_const
-            )  # shape (nTime, nE, 16)
-        else:
-            _F = _D = 1.0
+        self.geom_factor_eff = np.empty(self.data_raw["DATA"].shape)
 
-        tau = np.zeros(len(times))
-        for i in range(len(times)):
-            tau[i] = calib._calc_time_correction_tau(times[i], sensor_const)
+        geometric_factor_sim = calib._calc_simulation_geom_factor(energies)
 
-        tau = tau[:, np.newaxis, np.newaxis]  # shape (nTime, nE, 16)
+        deflection_correction = calib._calc_deflection_correction(delta)
+        # shape is [nTimes, nEnergy, nAnode]
 
-        _geometric_factor_sim = calib._calc_simulation_geom_factor(energies)
-        _x = calib._calc_sensor_dependence_exp(sensor_const, energies)
+        for i, t in enumerate(times):
+            sensitivity = calc_time_dependent_sensitivity(t)[np.newaxis, :]
+            detector_efficiency = calc_time_dependent_detector_efficiency(t)
+            mcp_efficiency = calc_mcp_efficiency(t, energies[i, :, :])
 
-        # Energy Geometric Factor in units of cm2 sr eV/eV
-        self.geom_factor_eff = _geometric_factor_sim * _x * tau * _D * _F
+            self.geom_factor_eff[i, :, :] = (
+                geometric_factor_sim[i, :, :]
+                * detector_efficiency
+                * sensitivity
+                * deflection_correction[i, :, :]
+                * mcp_efficiency
+            )
+
+    def _calc_geometric_factor_electrons_lowres(self):
+        """
+        Calculate geometric factors for high-res electron data.
+        """
+        energies = self.data_raw["DIM1_E"]
+        times = self.times
+
+        # fmt: off
+        if self.id == 104:
+            calc_time_dependent_detector_efficiency = calib._calc_time_dependence_detector_efficiency_e060
+            calc_mcp_efficiency = calib._calc_mcp_efficiency_e060
+        elif self.id == 106:
+            calc_time_dependent_detector_efficiency = calib._calc_time_dependence_detector_efficiency_e180
+            calc_mcp_efficiency = calib._calc_mcp_efficiency_e180
+        # fmt: on
+
+        self.geom_factor_eff = np.empty(self.data_raw["DATA"].shape)
+
+        geometric_factor_sim = calib._calc_simulation_geom_factor(energies)
+
+        for i, t in enumerate(times):
+            detector_efficiency = calc_time_dependent_detector_efficiency(t)
+            mcp_efficiency = calc_mcp_efficiency(t, energies[i, :, :])
+
+            self.geom_factor_eff[i, :, :] = (
+                geometric_factor_sim[i, :, :] * detector_efficiency * mcp_efficiency
+            )
 
     def calc_geometric_factor_ion(self):
         """
@@ -158,6 +205,9 @@ class SensorData(object):
                 "Call calc_geometric_factor_electrons() or calc_geometric_factor_ion() first."
             )
 
+        for k in to_convert:
+            self.data_raw[k] = self.data_raw[k].astype("float64")
+
         if "countrate" in units_in:
             assert (self.data_raw["DATA_UNITS"] == 2).all()
             if "def" in units_out:
@@ -178,7 +228,6 @@ class SensorData(object):
                     # Phase space density [s3 cm-6]
                     speed_squared = 2 * self.data_raw["DIM1_E"] * q * e / m  # m2 s-2
                     self.data_raw[k] /= self.geom_factor_eff * 0.5e8 * speed_squared**2
-                    self.data_raw[k] = self.data_raw[k].astype("float64")
         else:
             raise NotImplementedError(
                 "Only conversion from `countrate` is implemented."
@@ -357,7 +406,8 @@ class SensorData(object):
 
             weights = solid_angles
         else:
-            weights = np.zeros(len(pitchangle_bins) - 1) + 1.0
+            weights = np.empty(len(pitchangle_bins) - 1)
+            weights.fill(1.0)
 
         # We do this for numpy broadcasting magic
         weights = weights[np.newaxis, np.newaxis, :]
@@ -377,6 +427,7 @@ class SensorData(object):
             ) / np.sum(weights * nanmask, axis=-1)
 
         energy_spectra[energy_spectra == 0.0] = np.nan
+        self.data_rebinned[~nanmask] = np.nan
 
         self.energy_spectra = pd.DataFrame(
             index=self.times,
@@ -415,6 +466,7 @@ class SensorData(object):
             ) / np.sum(weights * nanmask, axis=1)
 
         pitchangle_spectra[pitchangle_spectra == 0.0] = np.nan
+        self.data_rebinned[~nanmask] = np.nan
 
         self.pitchangle_spectra = pd.DataFrame(
             index=self.times,

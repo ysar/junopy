@@ -16,8 +16,8 @@ nav:
       - examples/3_spice.ipynb
       - examples/4_mag_data.ipynb
       - examples/5_waves_survey.ipynb
-      - examples/jedi_data.ipynb
-      - examples/jade_data.ipynb
+      - examples/6_jade_data.ipynb
+      - examples/7_jedi_data.ipynb
   - API Reference:
       - api/index.md
       - config: api/config.md

@@ -147,7 +147,7 @@ class SensorData(object):
             calc_mcp_efficiency = calib._calc_mcp_efficiency_e180
         # fmt: on
 
-        self.geom_factor_eff = np.empty(self.data_raw["DATA"].shape)
+        self.geom_factor_eff = np.empty(self.data_raw["DATA"].shape, dtype=np.float64)
 
         geometric_factor_sim = calib._calc_simulation_geom_factor(energies)
 
@@ -219,7 +219,7 @@ class SensorData(object):
                 for k in to_convert:
                     # Differential Intensity [cm-2 s-1 sr-1 keV-1]
                     self.data_raw[k] /= (
-                        self.geom_factor_eff * q * self.data_raw["DIM1_E"] * 1e-3
+                        self.geom_factor_eff * q * self.data_raw["DIM1_E"] * 1.0e-3
                     )
                 self.data_raw["DATA_UNITS"][:] = 7
 
@@ -316,12 +316,9 @@ class SensorData(object):
         if add_background:
             data += d["BACKGROUND"]
 
-        # Set invalid values to zero or NaN
-        data[data < -999990] = np.nan
-        data[(data < 0) & (data > -999990)] = 0.0
-
-        uncertainty[uncertainty < -999990] = np.nan
-        uncertainty[(uncertainty < 0) & (uncertainty > -999990)] = 0.0
+        # Set invalid values to zero
+        data[data < 0] = 0.0
+        uncertainty[uncertainty < 0] = 0.0
 
         # Filter out the appropriate energies
         _energies = energies[0, :, 0]

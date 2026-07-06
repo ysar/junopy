@@ -593,7 +593,7 @@ wheels = [
 
 [[package]]
 name = "junopy"
-version = "2.1.0"
+version = "2.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "isal" },
@@ -619,7 +619,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "isal", specifier = ">=1.8.0" },
-    { name = "iupitermag", specifier = ">=0.1.5" },
+    { name = "iupitermag", specifier = ">=0.2.4" },
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "numpy", specifier = ">=2.3.1" },
     { name = "pandas", specifier = ">=2.3.0" },

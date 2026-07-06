@@ -71,6 +71,15 @@ class SensorData(object):
         self.times = df.index.to_pydatetime()
 
         self.data_raw = JadeBinaryData.create_dict_from_df(df)
+        self.set_invalid_values()
+
+    def set_invalid_values(self):
+        """
+        Before doing any unit conversions or re-binning. Set all 'invalid' values to nans.
+        """
+        keys_to_set = ["DATA", "DATA_SIGMA", "BACKGROUND", "BACKGROUND_SIGMA"]
+        for k in keys_to_set:
+            self.data_raw[k][self.data_raw[k] < -999990] = np.nan
 
     def calc_geometric_factor_electrons(self, is_high_res=True):
         """

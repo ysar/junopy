@@ -1,11 +1,6 @@
 """
 Methods to work with Jupiter's magnetic field models to calculate the
-equatorial pitch-angle, M-shell, etc. using JupiterMag.
-
-> Note: To calculate Jupiter's internal and current sheet field, use the appropriate
-methods from [`JupiterMag`](https://github.com/mattkjames7/JupiterMag) directly.
-This module only provides a simpler interface to calculate higher-level quantities
-like M-shell, loss-cone, etc., using `JupiterMag`.
+equatorial pitch-angle, M-shell, etc. using iupitermag.
 """
 
 import datetime as dt
@@ -33,8 +28,8 @@ class JunoFieldTrace:
 
         Attributes:
             times (list[dt.datetime]): List of times traversed by Juno in UTC.
-            internal_field (str): Internal field identifier passed to JupiterMag.
-            external_field (str): External field identifier passed to JupiterMag.
+            internal_field (str): Internal field identifier passed to iupiterMag.
+            external_field (str): External field identifier passed to iupiterMag.
             df (pd.DataFrame): DataFrame containing the M-shell, Bmin, Bmax
                 obtained from tracing magnetic field lines.
         """

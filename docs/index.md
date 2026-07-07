@@ -24,7 +24,7 @@ conversations with many people on the Juno mission and instrument teams.  Thank
 you all and hope this is of some use!
 
 ## Contributors:
-Yash Sarkango ([sarkango@umn.edu](mailto:sarkango@umn.eduu))
+Yash Sarkango ([sarkango@umn.edu](mailto:sarkango@umn.edu))
 
 ## FAQs
 
@@ -53,10 +53,7 @@ It should work well on MacOS/Linux and Windows via WSL.  In theory it should als
 work natively on Windows.
 
 6. **What library are you using for the magnetic field calculations?**  
-By itself, `junopy` does not use a magnetic field library or provide any functionality
-related to the modeled magnetic field (such as M-shell calculations).  However, 
-it is quite possible to use an external library like 
-[`JupiterMag`](https://github.com/mattkjames7/JupiterMag) 
+[`iupitermag`](https://github.com/ysar/iupitermag) 
 in conjunction with `junopy` to do all sorts of calculations.
 
 7. **How does this compare to MIDL or Autoplot?**  
@@ -67,5 +64,3 @@ to the underlying data.  There is a lot you can do with `junopy`, however (unles
 you already have it up and running) it will take a bit more effort to do it.  One
 use case where `junopy` really shines is when you need to combine data from 
 different instruments.
-
-

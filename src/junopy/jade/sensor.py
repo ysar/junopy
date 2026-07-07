@@ -324,6 +324,7 @@ class SensorData(object):
 
         if add_background:
             data += d["BACKGROUND"]
+            uncertainty = np.sqrt(d["BACKGROUND_SIGMA"] ** 2 + uncertainty**2)
 
         # Set invalid values to zero
         data[data < 0] = 0.0

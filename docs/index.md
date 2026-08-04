@@ -34,19 +34,16 @@ are included.  It is possible to add functionality to analyze data from other
 instruments (and contributions are welcome).  It will take some effort.
 
 2. **Have you published this? How can I cite this tool?**  
-There is no scientific publication that describes `junopy`, but it does have a 
-Zenodo ID that you can cite if you wish.
+There is no scientific publication that describes `junopy` but we might use Zenodo
+in case we make it public.
 
 3. **Was this funded by NASA? Is this sponsored by the Juno mission?**  
 No this was not directly sponsored or funded by NASA.  It is not an official tool 
 used by the mission team or the instrument teams.
 
 4. **Can I use this tool for my papers and proposals?**  
-Yes, `junopy` is freely available under an open-source MIT license.  You may use this
-tool as you see fit, under those very permissible terms.  
-You do not need to contact the maintainers to ask for permission.  
-However, please do consider reaching out to the relevant instrument teams since 
-they understand best the caveats associated with their data.  
+If you have access to this repository, then yes! Please don't share it with anyone 
+yet though. We plan to make this tool public eventually. 
 
 5. **What operating systems are supported?**  
 It should work well on MacOS/Linux and Windows via WSL.  In theory it should also 

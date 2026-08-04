@@ -103,6 +103,7 @@ def plot_distribution_perp_parallel(
     patch_collection.set_array(data.T.ravel())
     patch_collection.set_cmap(cmap)
     patch_collection.set_norm(colors.LogNorm(vmin=vmin, vmax=vmax))
+    patch_collection.set_edgecolor("face")
     ax.add_collection(patch_collection)
     return patch_collection
 

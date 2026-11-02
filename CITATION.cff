@@ -13,3 +13,6 @@ keywords:
   - juno spacecraft
   - jupiter magnetosphere
 date-released: 2026-11-01
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23898717

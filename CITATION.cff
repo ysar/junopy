@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+title: "junopy: A Python package for processing particles and fields data from the Juno spacecraft"
+version: 2.1.1
+license: "MIT"
+type: software
+abstract: "This package can be used to download, parse, and process data from the Juno magnetometer, Waves, JADE, and JEDI instruments"
+message: "If you'd like to cite this tool, please use the following."
+authors:
+  - given-names: Yash
+    family-names: Sarkango
+    orcid: "https://orcid.org/0000-0001-7812-7464"
+keywords:
+  - juno spacecraft
+  - jupiter magnetosphere

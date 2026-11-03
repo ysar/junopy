@@ -181,7 +181,7 @@ class WavesSurveyData(object):
             vmax (Optional[float]): The highest PSD on the colorbar.
             use_log_scale (bool): Whether to use log scale on the Y axis
             cbar_label (str): Label for the color bar.
-            **kwargs: Other arguments to pass to [plt.pcolormesh][]
+            **kwargs: Other arguments to pass to `plt.pcolormesh`
         """
 
         valid_channels = np.ones(len(self.channels), dtype=bool)

@@ -1,5 +1,7 @@
 # junopy  
-[![DOI](https://zenodo.org/badge/23898717.svg)](https://doi.org/10.5281/zenodo.23898717)  
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23898717.svg)](https://doi.org/10.5281/zenodo.23898717)
+[![Documentation](https://img.shields.io/badge/docs-online-blue)](https://ysar.github.io/junopy/)
+
 A python package to download, parse and plot particle and fields data from the NASA Planetary Data 
 System for the Juno spacecraft.
 
@@ -74,8 +76,9 @@ once. Steps for doing this vary - see for example - [uv with Jupyter](https://do
 Changes, bug fixes, and additions are very welcome. Please feel free to create an issue or pull request. 
 
 # Disclaimer
-This tool was built for personal research and is not an official tool for NASA's Juno mission. All 
-data used is publicly available from the PDS and NAIF. Errors and bugs may be present.
+This tool was built for personal research over several years and is not an official tool for NASA's 
+Juno mission. All data used is publicly available from the PDS and NAIF. Errors and bugs may be 
+present.
 
 # Citation
 Sarkango, Y. (2026). junopy: A Python package for processing particles and fields data from the Juno 
